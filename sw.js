@@ -1,6 +1,6 @@
 /* ตารางยา — service worker: ทำให้เปิดใช้ได้แม้ไม่มีอินเทอร์เน็ต */
-const CACHE = 'medtrack-v2';
-const SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
+const CACHE = 'medtrack-v3';
+const SHELL = ['./', './index.html', './data.json', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
