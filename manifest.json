@@ -1,0 +1,16 @@
+{
+  "name": "ตารางยา — บันทึกยาและอาหารเสริม",
+  "short_name": "ตารางยา",
+  "description": "บันทึกยาและอาหารเสริมที่ต้องกินเป็นเวลา เตือนล่วงหน้า และตรวจคู่ที่ห้ามกินร่วมกัน",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F7F8",
+  "theme_color": "#128A6E",
+  "lang": "th",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
