@@ -2,7 +2,7 @@
 <html lang="th" data-theme="pandan" data-dark="0">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#128A6E">
 <title>ตารางยา — บันทึกยาและอาหารเสริม</title>
 <link rel="manifest" href="manifest.json">
@@ -62,6 +62,10 @@ html[data-dark="1"][data-theme="anchan"]{ --accent:#9A85F0; --accent-ink:#CBBEFB
 html[data-dark="1"][data-theme="bua"]   { --accent:#EB6F9C; --accent-ink:#F8B7CE; }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* แตะรัว ๆ แล้วหน้าจอไม่ต้องซูมเข้า */
+html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+button,.tick,.pill,.chip,.sw,.seg button,.nav button,.keys button,.tagpick button,
+.dows button,.mdays button,.cal button,.mrow,.iconbtn{touch-action:manipulation}
 html,body{margin:0;padding:0}
 body{
   background:var(--paper); color:var(--ink);
@@ -375,8 +379,16 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
   <div class="lav" id="lkAv">🧑</div>
   <h1 id="lkName">ตารางยา</h1>
   <p id="lkMsg">ใส่รหัส PIN เพื่อเข้าใช้งาน</p>
+  <div class="seg hide" id="lkLen" style="max-width:230px;width:100%;margin:0 0 18px">
+    <button data-n="4">4 หลัก</button>
+    <button data-n="6">6 หลัก</button>
+  </div>
   <div class="dots" id="lkDots"></div>
   <div class="keys" id="lkKeys"></div>
+  <button class="btn ghost hide" id="lkBio" style="margin-top:20px;gap:9px">
+    <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="10.5" r="2.2"/><path d="M8.2 16.2a4.2 4.2 0 0 1 7.6 0"/></svg>
+    ปลดล็อกด้วยใบหน้า
+  </button>
   <div class="foot">
     <button id="lkSwitch" class="hide">เปลี่ยนผู้ใช้</button>
     <button id="lkForgot">ลืมรหัส PIN</button>
@@ -573,8 +585,12 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
         </select>
       </div>
       <div class="row">
-        <div class="g"><b>เปลี่ยนรหัส PIN</b><span>ตัวเลข 4–6 หลัก</span></div>
+        <div class="g"><b>เปลี่ยนรหัส PIN</b><span>เลือกได้ 4 หรือ 6 หลัก</span></div>
         <button class="btn sm ghost" id="chPin">เปลี่ยน</button>
+      </div>
+      <div class="row" id="bioRow">
+        <div class="g"><b>ปลดล็อกด้วยใบหน้าหรือลายนิ้วมือ</b><span id="bioState">กำลังตรวจสอบอุปกรณ์</span></div>
+        <button class="sw" id="bioOn"></button>
       </div>
     </div>
 
@@ -3285,6 +3301,68 @@ function showAlarm(){
   $('#alSnooze').onclick = () => { P.snoozes[d.key] = Date.now() + 10*60000; save(); close(); toast('เลื่อนไปอีก 10 นาที'); };
 }
 
+
+/* ================= ปลดล็อกด้วยใบหน้าหรือลายนิ้วมือ (WebAuthn) ================= */
+function b64u(buf){
+  let s = '';
+  new Uint8Array(buf).forEach(b => s += String.fromCharCode(b));
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function unb64u(str){
+  const t = str.replace(/-/g,'+').replace(/_/g,'/');
+  const b = atob(t + '==='.slice((t.length + 3) % 4));
+  const a = new Uint8Array(b.length);
+  for(let i=0;i<b.length;i++) a[i] = b.charCodeAt(i);
+  return a;
+}
+function bioSupported(){
+  return !!(window.PublicKeyCredential && navigator.credentials && window.isSecureContext);
+}
+async function bioAvailable(){
+  if(!bioSupported()) return false;
+  try{ return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
+  catch(e){ return false; }
+}
+async function bioRegister(){
+  const ch = crypto.getRandomValues(new Uint8Array(32));
+  const uid8 = crypto.getRandomValues(new Uint8Array(16));
+  const cred = await navigator.credentials.create({ publicKey:{
+    challenge: ch,
+    rp:{ name:'ตารางยา' },
+    user:{ id: uid8, name: (P.name || 'user') + '@' + P.id, displayName: P.name || 'user' },
+    pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+    authenticatorSelection:{ authenticatorAttachment:'platform', userVerification:'required', residentKey:'preferred' },
+    timeout: 60000, attestation:'none'
+  }});
+  if(!cred) throw new Error('no credential');
+  P.bio = b64u(cred.rawId);
+  save();
+}
+async function bioVerify(){
+  const ch = crypto.getRandomValues(new Uint8Array(32));
+  const res = await navigator.credentials.get({ publicKey:{
+    challenge: ch,
+    allowCredentials:[{ type:'public-key', id: unb64u(P.bio) }],
+    userVerification:'required', timeout: 60000
+  }});
+  return !!res;
+}
+let bioTried = false;
+async function bioUnlock(auto){
+  if(!P || !P.bio || !bioSupported()) return;
+  const btn = $('#lkBio');
+  try{
+    if(btn) btn.disabled = true;
+    const ok = await bioVerify();
+    if(ok) enterApp();
+  }catch(e){
+    if(!auto) $('#lkMsg').textContent = Lx('ยังปลดล็อกด้วยใบหน้าไม่ได้ ใช้รหัส PIN แทนได้',
+                                           'Face unlock did not work — you can use your PIN instead');
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
 /* ================= ตั้งค่า ================= */
 const THEMES = [['pandan','ใบเตย','#128A6E'],['kram','คราม','#2A5FC4'],['opchoey','อบเชย','#B65A22'],['anchan','อัญชัน','#6248C9'],['bua','บัว','#BC3268']];
 function applyTheme(){
@@ -3325,6 +3403,25 @@ function renderSettings(){
   $$('#leadSeg button').forEach(b => b.classList.toggle('on', +b.dataset.v === s.lead));
   $$('#langSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === LANG));
   $('#autoLock').value = String(s.autoLock);
+  $('#bioOn').classList.toggle('on', !!P.bio);
+  bioAvailable().then(av => {
+    const st = $('#bioState'), sw = $('#bioOn');
+    if(!st) return;
+    if(!bioSupported()){
+      st.textContent = Lx('ต้องเปิดผ่าน https จึงจะใช้ได้ เปิดจากไฟล์โดยตรงใช้ไม่ได้',
+                          'Needs an https address — opening the file directly will not work');
+      sw.disabled = true; sw.style.opacity = '.45';
+    } else if(!av && !P.bio){
+      st.textContent = Lx('อุปกรณ์นี้ยังไม่ได้ตั้งค่า Face ID หรือลายนิ้วมือ',
+                          'This device has no Face ID or fingerprint set up');
+      sw.disabled = true; sw.style.opacity = '.45';
+    } else {
+      st.textContent = P.bio ? Lx('เปิดอยู่ ยังใช้รหัส PIN สำรองได้เสมอ','On — your PIN still works as a fallback')
+                             : Lx('ใช้ Face ID หรือลายนิ้วมือของเครื่องแทนการกดรหัส',
+                                  'Use the device Face ID or fingerprint instead of typing a PIN');
+      sw.disabled = false; sw.style.opacity = '';
+    }
+  });
   $('#notiState').textContent = !('Notification' in window) ? 'เบราว์เซอร์นี้ไม่รองรับ'
     : Notification.permission === 'granted' ? 'อนุญาตแล้ว'
     : Notification.permission === 'denied' ? 'ถูกปฏิเสธ ต้องเปิดในตั้งค่าเบราว์เซอร์' : 'ยังไม่ได้อนุญาต';
@@ -3433,6 +3530,25 @@ $('#addProf').onclick = () => {
     setPinFlow(p, () => { DB.profiles.push(p); DB.active = p.id; save(); lockNow(); });
   };
 };
+$('#bioOn').onclick = async () => {
+  if(P.bio){
+    if(!confirm(Lx('ปิดการปลดล็อกด้วยใบหน้าใช่หรือไม่ ต่อไปต้องใช้รหัส PIN อย่างเดียว',
+                   'Turn off face unlock? You will need your PIN from then on.'))) return;
+    delete P.bio; save(); renderSettings(); toast(Lx('ปิดแล้ว','Turned off'));
+    return;
+  }
+  try{
+    await bioRegister();
+    renderSettings();
+    toast(Lx('เปิดใช้แล้ว ครั้งหน้าปลดล็อกด้วยใบหน้าได้เลย','Set up — next time you can unlock with your face'));
+  }catch(e){
+    toast(e && e.name === 'SecurityError'
+      ? Lx('ที่อยู่นี้ใช้ไม่ได้ ต้องเปิดผ่านชื่อโดเมนจริงเช่น GitHub Pages ไม่ใช่เลข IP',
+           'This address will not work — open it from a real domain such as GitHub Pages, not an IP address')
+      : Lx('ตั้งค่าไม่สำเร็จ อุปกรณ์อาจยกเลิกหรือยังไม่ได้ตั้ง Face ID',
+           'Setup failed — the device may have cancelled, or Face ID is not set up'));
+  }
+};
 $('#chPin').onclick = () => setPinFlow(P, () => { save(); toast('เปลี่ยนรหัส PIN แล้ว'); }, true);
 
 /* ================= ข้อมูล ================= */
@@ -3469,9 +3585,35 @@ $('#wipeBtn').onclick = () => {
 
 /* ================= ล็อกหน้าจอ / PIN ================= */
 let pinBuf = '', pinMode = null, pinTarget = null, pinFirst = null, pinDone = null, pinIsChange = false, pinStage = 0;
+let pinLenChoice = 6;
+function pinWant(){
+  if(pinMode === 'unlock') return (pinTarget && pinTarget.pinLen) || 0;
+  if(pinStage === 0 && pinIsChange) return (pinTarget && pinTarget.pinLen) || 0;
+  if(pinStage === 2 && pinFirst) return pinFirst.length;
+  return pinLenChoice;
+}
+function drawLenPicker(){
+  const box = $('#lkLen');
+  const show = pinMode === 'set' && (pinStage === 0 ? !pinIsChange : pinStage === 1);
+  box.classList.toggle('hide', !show);
+  if(!show) return;
+  $$('#lkLen button').forEach(b => {
+    b.classList.toggle('on', +b.dataset.n === pinLenChoice);
+    b.onclick = () => { pinLenChoice = +b.dataset.n; pinBuf = ''; drawLenPicker(); drawDots(0); setPinMsg(); };
+  });
+}
+function setPinMsg(){
+  if(pinMode !== 'set') return;
+  const n = pinLenChoice;
+  if(pinStage === 0 && pinIsChange) $('#lkMsg').textContent = Lx('ใส่รหัส PIN เดิม','Enter your current PIN');
+  else if(pinStage === 2) $('#lkMsg').textContent = pinIsChange
+      ? Lx('ใส่รหัสใหม่อีกครั้งเพื่อยืนยัน','Enter the new PIN again to confirm')
+      : Lx('ใส่รหัสอีกครั้งเพื่อยืนยัน','Enter it again to confirm');
+  else $('#lkMsg').textContent = Lx('ตั้งรหัส PIN ' + n + ' หลัก','Set a ' + n + '-digit PIN');
+}
 
 function drawDots(n, len){
-  const want = len || (pinMode === 'unlock' && pinTarget && pinTarget.pinLen) || 4;
+  const want = len || pinWant() || 4;
   $('#lkDots').innerHTML = Array.from({length: Math.max(want, n)}, (_,i) =>
     '<i class="' + (i < n ? 'f' : '') + '"></i>').join('');
 }
@@ -3488,11 +3630,17 @@ function keyPress(k){
   if(k === 'ok'){ submitPin(); return; }
   if(pinBuf.length >= 6) return;
   pinBuf += k; drawDots(pinBuf.length);
-  const want = (pinMode === 'unlock' && pinTarget) ? (pinTarget.pinLen || 0) : 6;
-  if(pinBuf.length === (want || 6)) submitPin();
+  const want = pinWant();
+  if(want && pinBuf.length === want) submitPin();
+  else if(!want && pinBuf.length === 6) submitPin();
 }
 async function submitPin(){
-  if(pinBuf.length < 4){ $('#lkMsg').textContent = 'รหัส PIN ต้องมีอย่างน้อย 4 หลัก'; return; }
+  const want = pinWant();
+  if(pinMode === 'set' && want && pinBuf.length !== want){
+    $('#lkMsg').textContent = Lx('ต้องใส่ให้ครบ ' + want + ' หลัก','Enter all ' + want + ' digits');
+    return;
+  }
+  if(pinBuf.length < 4){ $('#lkMsg').textContent = Lx('รหัส PIN ต้องมีอย่างน้อย 4 หลัก','A PIN needs at least 4 digits'); return; }
   const buf = pinBuf; pinBuf = ''; drawDots(0);
 
   if(pinMode === 'unlock'){
@@ -3511,17 +3659,18 @@ async function submitPin(){
       if(pinIsChange && pinTarget.pin){
         const h = await hashPin(buf, pinTarget.salt);
         if(h !== pinTarget.pin){ $('#lkMsg').textContent = 'รหัสเดิมไม่ถูกต้อง'; return; }
-        pinStage = 1; $('#lkMsg').textContent = 'ตั้งรหัส PIN ใหม่ 4–6 หลัก';
+        pinStage = 1; drawLenPicker(); setPinMsg(); drawDots(0);
         return;
       }
-      pinFirst = buf; pinStage = 2; $('#lkMsg').textContent = 'ใส่รหัสเดิมอีกครั้งเพื่อยืนยัน';
+      pinFirst = buf; pinStage = 2; drawLenPicker(); setPinMsg(); drawDots(0);
       return;
     }
-    if(pinStage === 1){ pinFirst = buf; pinStage = 2; $('#lkMsg').textContent = 'ใส่รหัสใหม่อีกครั้งเพื่อยืนยัน'; return; }
+    if(pinStage === 1){ pinFirst = buf; pinStage = 2; drawLenPicker(); setPinMsg(); drawDots(0); return; }
     if(pinStage === 2){
       if(buf !== pinFirst){
         pinStage = pinIsChange ? 1 : 0; pinFirst = null;
-        $('#lkMsg').textContent = 'รหัสสองครั้งไม่ตรงกัน เริ่มใหม่';
+        drawLenPicker(); drawDots(0);
+        $('#lkMsg').textContent = Lx('รหัสสองครั้งไม่ตรงกัน เริ่มใหม่','The two entries did not match. Start again.');
         return;
       }
       pinTarget.salt = makeSalt();
@@ -3538,13 +3687,14 @@ function setPinFlow(profile, done, isChange){
   pinMode = 'set'; pinTarget = profile; pinDone = done; pinIsChange = !!isChange;
   pinStage = isChange && profile.pin ? 0 : (isChange ? 1 : 0);
   pinBuf = ''; pinFirst = null;
+  pinLenChoice = (isChange && profile.pinLen) ? profile.pinLen : 6;
   $('#lock').style.display = 'flex';
   $('#lkAv').textContent = profile.emoji;
   $('#lkName').textContent = profile.name;
-  $('#lkMsg').textContent = pinStage === 0 && isChange ? 'ใส่รหัส PIN เดิม' : 'ตั้งรหัส PIN 4–6 หลัก';
   $('#lkSwitch').classList.add('hide');
   $('#lkForgot').classList.add('hide');
-  drawDots(0, 6); buildKeys();
+  $('#lkBio').classList.add('hide');
+  drawLenPicker(); setPinMsg(); drawDots(0); buildKeys();
 }
 function lockNow(){
   P = DB.profiles.find(p => p.id === DB.active) || DB.profiles[0];
@@ -3562,10 +3712,14 @@ function lockNow(){
   $('#lkMsg').textContent = 'ใส่รหัส PIN เพื่อเข้าใช้งาน';
   $('#lkSwitch').classList.toggle('hide', DB.profiles.length < 2);
   $('#lkForgot').classList.remove('hide');
+  $('#lkLen').classList.add('hide');
+  $('#lkBio').classList.toggle('hide', !(P.bio && bioSupported()));
   drawDots(0); buildKeys();
+  if(P.bio && bioSupported() && !bioTried){ bioTried = true; setTimeout(() => bioUnlock(true), 350); }
   if(notiTick){ clearInterval(notiTick); notiTick = null; }
   const cr = $('#credit'); if(cr) cr.classList.add('low');
 }
+$('#lkBio').onclick = () => bioUnlock(false);
 $('#lkSwitch').onclick = () => {
   openSheet('<div class="shd"><b>เลือกผู้ใช้</b><button class="btn sm ghost" onclick="closeSheet()">ปิด</button></div>'+
     DB.profiles.map(p => '<button class="mrow" data-p="' + p.id + '"><span class="avatar">' + p.emoji + '</span>'+
@@ -3583,6 +3737,7 @@ $('#lkForgot').onclick = () => {
   }
 };
 function enterApp(){
+  bioTried = false;
   $('#lock').style.display = 'none';
   showApp();
 }
@@ -4011,11 +4166,15 @@ const DICT = {
 'อ้วนระดับ 1':'obesity class 1','อ้วนระดับ 2':'obesity class 2',
 'เกณฑ์สำหรับผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก ไม่ใช้กับเด็ก หญิงตั้งครรภ์ และนักกีฬา':
  'WHO Asian adult cut-offs. Not for children, pregnancy or athletes.',
-'ภาษา':'Language','ไทย':'ไทย','อังกฤษ':'English','เลือกภาษาของทั้งแอป':'Sets the language for the whole app',
+'ปลดล็อกด้วยใบหน้า':'Unlock with your face','ปลดล็อกด้วยใบหน้าหรือลายนิ้วมือ':'Unlock with face or fingerprint',
+'กำลังตรวจสอบอุปกรณ์':'Checking this device','เลือกได้ 4 หรือ 6 หลัก':'Choose 4 or 6 digits',
+'4 หลัก':'4 digits','6 หลัก':'6 digits','ภาษา':'Language','ไทย':'ไทย','อังกฤษ':'English','เลือกภาษาของทั้งแอป':'Sets the language for the whole app',
 /* lock + first run */
 'ใส่รหัส PIN เพื่อเข้าใช้งาน':'Enter your PIN to continue','รหัส PIN ไม่ถูกต้อง ลองอีกครั้ง':'Wrong PIN. Try again.',
 'ลืมรหัส PIN':'Forgot your PIN','ตั้งรหัส PIN 4–6 หลัก':'Set a 4 to 6 digit PIN','ใส่รหัส PIN เดิม':'Enter your current PIN',
-'ตั้งรหัส PIN ใหม่ 4–6 หลัก':'Set a new 4 to 6 digit PIN','ใส่รหัสเดิมอีกครั้งเพื่อยืนยัน':'Enter it again to confirm',
+'ตั้งรหัส PIN ใหม่ 4–6 หลัก':'Set a new 4 to 6 digit PIN','ใส่รหัสเดิมอีกครั้งเพื่อยืนยัน':'Enter it again to confirm','ใส่รหัสอีกครั้งเพื่อยืนยัน':'Enter it again to confirm',
+'ต้องใส่ให้ครบ 4 หลัก':'Enter all 4 digits','ต้องใส่ให้ครบ 6 หลัก':'Enter all 6 digits',
+'ยังปลดล็อกด้วยใบหน้าไม่ได้ ใช้รหัส PIN แทนได้':'Face unlock did not work — you can use your PIN instead',
 'ใส่รหัสใหม่อีกครั้งเพื่อยืนยัน':'Enter the new PIN again to confirm','รหัสสองครั้งไม่ตรงกัน เริ่มใหม่':'The two entries did not match. Start again.',
 'รหัสเดิมไม่ถูกต้อง':'That is not your current PIN','รหัส PIN ต้องมีอย่างน้อย 4 หลัก':'A PIN needs at least 4 digits',
 'เรียกคุณว่าอะไรดี':'What should we call you','ชื่อของคุณ':'Your name','เริ่มใช้งาน':'Get started',

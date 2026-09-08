@@ -1,5 +1,5 @@
 /* ตารางยา — service worker: ทำให้เปิดใช้ได้แม้ไม่มีอินเทอร์เน็ต */
-const CACHE = 'medtrack-v1';
+const CACHE = 'medtrack-v2';
 const SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
