@@ -610,6 +610,12 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
     </div>
 
     <div class="card">
+      <h3>คลังยาส่วนตัว</h3>
+      <p class="h">ยาที่คุณเพิ่มเองนอกเหนือจากคลังหลัก</p>
+      <button class="btn ghost full sm" id="cdBtn">เปิดคลังยาส่วนตัว</button>
+    </div>
+
+    <div class="card">
       <h3>ข้อมูลของคุณ</h3>
       <p class="h">สำรองไฟล์ไว้เป็นระยะ เพราะข้อมูลอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น</p>
       <div class="two">
@@ -1317,7 +1323,7 @@ function thDate(d){
 }
 
 function blank(){
-  return { v:1, profiles:[], active:null };
+  return { v:1, profiles:[], active:null, customDrugs:[] };
 }
 function load(){
   try{ DB = JSON.parse(localStorage.getItem(LS)) || blank(); }
@@ -1446,7 +1452,7 @@ async function writeDB(){
     VAULT_FIELDS.forEach(f => clear[f] = P[f]);
     P.vault = await sealJSON(clear);
   }
-  const out = { v:DB.v, active:DB.active, profiles: DB.profiles.map(stripped) };
+  const out = { v:DB.v, active:DB.active, customDrugs: DB.customDrugs || [], profiles: DB.profiles.map(stripped) };
   localStorage.setItem(LS, JSON.stringify(out));
 }
 
@@ -1471,6 +1477,176 @@ async function rewrapPin(newPin){
   if(!P.vault || !DEK) return;
   const raw = await crypto.subtle.exportKey('raw', DEK).catch(() => null);
   if(raw){ P.wrapPin = await wrapDEK(raw, newPin); save(); }
+}
+
+
+/* ================================================================
+   ค้นหาชื่อยาแบบเติมคำอัตโนมัติ ทั้งชื่อสามัญและชื่อการค้า
+   ================================================================ */
+let BRANDS = [], SIZES = {}, DRUGS = [];
+
+function buildDrugIndex(){
+  DRUGS = [];
+  const byGen = {};
+  CATALOG.forEach(g => g.it.forEach(it => {
+    const row = { th:it[0], en:it[1], gth:it[0], gen:it[1], tags:it[2] || [],
+                  unit:it[3], st:it[4], su:it[5], cat:g.c, kind:g.g, brand:false };
+    DRUGS.push(row);
+    if(!byGen[row.gen]) byGen[row.gen] = row;
+  }));
+  BRANDS.forEach(b => {
+    const base = byGen[b[2]];
+    if(!base) return;
+    DRUGS.push({ th:b[0], en:b[1], gth:base.th, gen:b[2], tags:base.tags,
+                 unit:b[3], st:b[4], su:b[5], cat:base.cat, kind:base.kind, brand:true });
+  });
+  ((DB && DB.customDrugs) || []).forEach(c => DRUGS.push(Object.assign({}, c, {custom:true})));
+}
+function searchDrugs(q, n){
+  q = String(q || '').trim().toLowerCase();
+  if(q.length < 1) return [];
+  const hits = [];
+  DRUGS.forEach(x => {
+    let score = 0;
+    [x.th, x.en, x.gth, x.gen].forEach(v => {
+      if(!v) return;
+      const h = String(v).toLowerCase();
+      if(h === q) score = Math.max(score, 4);
+      else if(h.startsWith(q)) score = Math.max(score, 3);
+      else if(h.indexOf(q) >= 0) score = Math.max(score, 2);
+    });
+    if(score) hits.push({x:x, score:score});
+  });
+  hits.sort((a,b) => b.score - a.score || (a.x.brand === b.x.brand ? 0 : a.x.brand ? 1 : -1) || a.x.th.length - b.x.th.length);
+  const seen = new Set(), out = [];
+  hits.forEach(h => {
+    const k = h.x.th + '|' + h.x.st + h.x.su + h.x.unit;
+    if(seen.has(k) || out.length >= (n || 8)) return;
+    seen.add(k); out.push(h.x);
+  });
+  return out;
+}
+function drugLabel(x){ return LANG === 'en' ? (x.en || x.th) : x.th; }
+function findGeneric(d){
+  if(d.gen) return d.gen;
+  const q = String(d.nameEn || d.name || '').trim().toLowerCase();
+  if(!q) return null;
+  const hit = DRUGS.find(x => String(x.en).toLowerCase() === q || String(x.th).toLowerCase() === q);
+  return hit ? hit.gen : null;
+}
+function knownDrug(d){
+  const q = String(d.name || '').trim().toLowerCase();
+  if(!q) return true;
+  return DRUGS.some(x => String(x.th).toLowerCase() === q || String(x.en).toLowerCase() === q);
+}
+
+let sugList = [];
+function renderSug(inputSel, boxSel){
+  const box = $(boxSel), inp = $(inputSel);
+  if(!box || !inp) return;
+  const q = inp.value;
+  sugList = searchDrugs(q, 8);
+  if(!q.trim() || !sugList.length){ box.innerHTML = ''; return; }
+  box.innerHTML = sugList.map((x,i) =>
+    '<button data-s="' + i + '">' + esc(drugLabel(x)) +
+    (x.brand ? '<span style="opacity:.55"> · ' + esc(LANG === 'en' ? x.gen : x.gth) + '</span>' : '') +
+    (x.st ? '<span style="opacity:.55"> · ' + esc(fmtAmt(x.st, x.su)) + '</span>' : '') +
+    (x.custom ? '<span style="opacity:.55"> · ' + Lx('คลังส่วนตัว','my library') + '</span>' : '') +
+    '</button>').join('');
+  $$(boxSel + ' [data-s]').forEach(b => b.onclick = () => pickDrug(sugList[+b.dataset.s]));
+}
+function pickDrug(x){
+  if(!x) return;
+  const d = draft;
+  d.name = x.th; d.nameEn = x.en || x.gen;
+  d.gen = x.gen;
+  d.tags = (x.tags || []).slice(); d.tagsOff = [];
+  if(x.unit) d.unit = x.unit;
+  if(x.st) d.strength = x.st;
+  if(x.su) d.strengthUnit = x.su;
+  d.type = x.kind === 'supp' ? 'supp' : 'med';
+  openEditorSheet();
+}
+/* แถบชื่อสามัญ ยี่ห้ออื่น และขนาดที่มีขาย */
+function relatedBlock(d){
+  const gen = findGeneric(d);
+  if(!gen) return '';
+  const sibs = DRUGS.filter(x => x.gen === gen);
+  const base = sibs.find(x => !x.brand) || sibs[0];
+  const brands = sibs.filter(x => x.brand && x.th !== d.name);
+  const sizes = (SIZES[gen] || []).filter(z => !(z[0] === d.strength && z[1] === d.strengthUnit && z[2] === d.unit));
+  return '<div class="card" style="box-shadow:none">'+
+    '<h3>' + Lx('ตัวยาเดียวกัน','Same active ingredient') + '</h3>'+
+    '<p class="h">' + Lx('ชื่อสามัญ','Generic name') + ': <b>' + esc(gen) + '</b>' +
+      (base && base.th !== gen ? ' · ' + esc(base.th) : '') + '</p>'+
+    (base && (d.name !== base.th || d.nameEn !== base.en) ?
+      '<div class="tagpick" style="margin-bottom:10px"><button data-gen="1">' +
+      Lx('ใช้ชื่อสามัญแทน','Use the generic name') + ' · ' + esc(base.th) + '</button></div>' : '')+
+    (brands.length ? '<label class="fl">' + Lx('ยี่ห้ออื่นที่เป็นตัวยาเดียวกัน','Other brands with the same ingredient') + '</label>'+
+      '<div class="tagpick" style="margin-bottom:10px">' + brands.slice(0,10).map((x,i) =>
+        '<button data-br="' + DRUGS.indexOf(x) + '">' + esc(drugLabel(x)) + '</button>').join('') + '</div>' : '')+
+    (sizes.length ? '<label class="fl">' + Lx('ขนาดที่มีขายทั่วไป','Strengths commonly sold') + '</label>'+
+      '<div class="tagpick">' + sizes.map((z,i) =>
+        '<button data-sz="' + i + '">' + esc(fmtAmt(z[0], z[1])) + ' · ' + esc(z[2]) + '</button>').join('') + '</div>' : '')+
+    '</div>';
+}
+function bindRelated(d){
+  const g = $('#fRel'); if(!g) return;
+  const gen = findGeneric(d);
+  const sizes = gen ? (SIZES[gen] || []).filter(z => !(z[0] === d.strength && z[1] === d.strengthUnit && z[2] === d.unit)) : [];
+  const base = gen ? DRUGS.find(x => x.gen === gen && !x.brand) : null;
+  const gb = $('#fRel [data-gen]');
+  if(gb) gb.onclick = () => { if(window.__sync) window.__sync(); pickDrug(base); };
+  $$('#fRel [data-br]').forEach(b => b.onclick = () => { if(window.__sync) window.__sync(); pickDrug(DRUGS[+b.dataset.br]); });
+  $$('#fRel [data-sz]').forEach(b => b.onclick = () => {
+    if(window.__sync) window.__sync();
+    const z = sizes[+b.dataset.sz];
+    d.strength = z[0]; d.strengthUnit = z[1]; d.unit = z[2];
+    openEditorSheet();
+  });
+}
+
+/* ---- คลังยาส่วนตัว ---- */
+function addCustomDrug(d){
+  DB.customDrugs = DB.customDrugs || [];
+  const row = { th:(d.name || '').trim(), en:(d.nameEn || '').trim() || (d.name || '').trim(),
+                gth:(d.name || '').trim(), gen:(d.nameEn || '').trim() || (d.name || '').trim(),
+                tags:medTags(d), unit:d.unit, st:d.strength, su:d.strengthUnit,
+                cat:Lx('เพิ่มเอง','Added by me'), kind:d.type, at:todayStr() };
+  if(DB.customDrugs.some(x => x.th === row.th && x.st === row.st)){ toast(Lx('มีอยู่ในคลังส่วนตัวแล้ว','Already in your library')); return; }
+  DB.customDrugs.push(row);
+  save(); buildDrugIndex();
+  toast(Lx('เพิ่มเข้าคลังส่วนตัวแล้ว','Added to your library'));
+  renderSettings();
+}
+function customSheet(){
+  const list = DB.customDrugs || [];
+  openSheet('<div class="shd"><b>' + Lx('คลังยาส่วนตัว','My drug library') + '</b>'+
+    '<button class="btn sm ghost" onclick="closeSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    '<p style="font-size:13px;color:var(--ink-2);margin:0 0 14px;line-height:1.65">' +
+    Lx('ยาที่คุณเพิ่มเองจะขึ้นในช่องค้นหาเหมือนยาในคลังหลัก และอยู่ในเครื่องนี้เท่านั้น เพราะแอปไม่มีเซิร์ฟเวอร์กลาง ถ้าอยากให้คนอื่นได้ใช้ด้วย ให้ส่งไฟล์รายการนี้ไปให้ผู้ดูแลโปรเจกต์รวมเข้าคลังหลัก',
+       'Drugs you add appear in search just like the built-in ones, and stay on this device because the app has no central server. If you want others to have them, send this file to whoever maintains the project so they can merge it into the main library.') + '</p>'+
+    (list.length ? list.map((x,i) => '<div class="mrow" style="align-items:center">'+
+      '<span class="bd"><span class="nm">' + esc(x.th) + '</span>'+
+      '<span class="tt">' + esc(x.en) + (x.st ? ' · ' + esc(fmtAmt(x.st, x.su)) : '') + ' · ' + esc(x.unit || '') + '</span></span>'+
+      '<button class="tick" data-del="' + i + '"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button></div>').join('')
+      : '<div class="empty"><p>' + Lx('ยังไม่มียาที่เพิ่มเอง','Nothing added yet') + '</p></div>')+
+    (list.length ? '<button class="btn full" id="cdExp" style="margin-top:10px">' +
+      Lx('ส่งออกไฟล์เพื่อเสนอเข้าคลังหลัก','Export a file to propose for the main library') + '</button>' : ''));
+  $$('#sheetBody [data-del]').forEach(b => b.onclick = () => {
+    DB.customDrugs.splice(+b.dataset.del, 1); save(); buildDrugIndex(); customSheet(); renderSettings();
+  });
+  const ex = $('#cdExp');
+  if(ex) ex.onclick = () => {
+    const out = { kind:'medtracker-drug-contribution', version:1, at:new Date().toISOString(),
+                  drugs:(DB.customDrugs || []).map(x => ({th:x.th, en:x.en, tags:x.tags, unit:x.unit, strength:x.st, strengthUnit:x.su, kind:x.kind})) };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], {type:'application/json'}));
+    a.download = 'medtracker-drugs-contribution.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    toast(Lx('บันทึกไฟล์แล้ว ส่งให้ผู้ดูแลโปรเจกต์ได้เลย','File saved — send it to the project maintainer'));
+  };
 }
 
 /* ---- คำถามกู้รหัส ---- */
@@ -1667,7 +1843,7 @@ function wipeProfile(){
   DB.profiles = DB.profiles.filter(x => x.id !== P.id);
   DB.active = DB.profiles.length ? DB.profiles[0].id : null;
   DEK = null;
-  localStorage.setItem(LS, JSON.stringify({v:DB.v, active:DB.active, profiles:DB.profiles.map(stripped)}));
+  localStorage.setItem(LS, JSON.stringify({v:DB.v, active:DB.active, customDrugs:DB.customDrugs || [], profiles:DB.profiles.map(stripped)}));
   location.reload();
 }
 
@@ -2042,10 +2218,15 @@ function drawEditor(){
   const d = draft, f = d.freq;
   const ICONS = ['💊','🩹','🧴','💉','🍬','🫙','🌿','🐟','🥛','🍊','🦴','🧬','❤️','🧠','😴'];
   $('#edBody').innerHTML =
-    '<div class="fld"><label class="fl">ชื่อรายการ</label>'+
-      '<input id="fName" value="' + esc(d.name) + '" placeholder="เช่น แคลเซียม 600 มก."></div>'+
+    '<div class="fld"><label class="fl">ชื่อตัวยาหรืออาหารเสริม</label>'+
+      '<input id="fName" value="' + esc(d.name) + '" autocomplete="off" placeholder="พิมพ์ชื่อสามัญหรือชื่อการค้า เช่น ซาร่า พารา Panadol">'+
+      '<div class="tagpick" id="fSug" style="margin-top:8px"></div></div>'+
     '<div class="fld"><label class="fl">ชื่อภาษาอังกฤษ (ช่วยให้ตรวจคู่ยาแม่นขึ้น)</label>'+
-      '<input id="fNameEn" value="' + esc(d.nameEn) + '" placeholder="Calcium carbonate"></div>'+
+      '<input id="fNameEn" value="' + esc(d.nameEn) + '" autocomplete="off" placeholder="Paracetamol">'+
+      '<div class="tagpick" id="fSugEn" style="margin-top:8px"></div></div>'+
+    '<div id="fRel">' + relatedBlock(d) + '</div>'+
+    (knownDrug(d) ? '' : '<button class="btn ghost sm full" id="fAddLib" style="margin-bottom:14px">'+
+      'ยังไม่มีชื่อนี้ในคลัง เพิ่มเข้าคลังยาส่วนตัว</button>')+
     '<div class="two" style="margin-bottom:14px">'+
       '<button class="btn ghost sm" id="fPick" data-tip="เลือกจากรายชื่อยาและอาหารเสริมที่รวบรวมไว้ ไม่ต้องพิมพ์เอง">เลือกจากรายการยา</button>'+
       '<button class="btn ghost sm" id="fInfo" data-tip="ข้อบ่งใช้ ข้อห้ามใช้ คำเตือน และผลข้างเคียง">ข้อมูลและข้อห้าม</button></div>'+
@@ -2170,7 +2351,15 @@ function drawEditor(){
   };
   $('#fInfo').onclick = () => { sync(); infoSheet(medTags(d), d.name || Lx('รายการนี้','this item'), d.nameEn, null, d.id); };
 
-  $('#fName').oninput = () => { sync(); };
+  $('#fName').oninput = () => { sync(); renderSug('#fName', '#fSug'); };
+  $('#fNameEn').oninput = () => { sync(); renderSug('#fNameEn', '#fSugEn'); };
+  bindRelated(d);
+  const addLib = $('#fAddLib');
+  if(addLib) addLib.onclick = () => {
+    sync();
+    if(!d.name.trim()){ toast(Lx('ใส่ชื่อรายการก่อน','Enter a name first')); return; }
+    addCustomDrug(d); openEditorSheet();
+  };
   $$('#fType button').forEach(b => b.onclick = () => { sync(); d.type = b.dataset.v; drawEditor(); });
   $$('#fIcon button').forEach(b => b.onclick = () => { sync(); d.icon = b.dataset.i; drawEditor(); });
   $$('#fMeal button').forEach(b => b.onclick = () => { sync(); d.meal = b.dataset.v; drawEditor(); });
@@ -2669,6 +2858,13 @@ function renderSettings(){
     (p.id === P.id ? '<button class="btn sm ghost" data-ep="' + p.id + '">แก้ไข</button>'
       : '<button class="btn sm ghost" data-sp="' + p.id + '">สลับไป</button>') + '</div>').join('');
   const lg = $('#legendRow'); if(lg) lg.onclick = legendSheet;
+  const cd = $('#cdBtn');
+  if(cd){
+    const n = (DB.customDrugs || []).length;
+    cd.textContent = n ? Lx('เปิดคลังยาส่วนตัว (' + n + ' รายการ)', 'Open my drug library (' + n + ')')
+                       : Lx('เปิดคลังยาส่วนตัว','Open my drug library');
+    cd.onclick = customSheet;
+  }
   $$('#profList [data-sp]').forEach(b => b.onclick = () => { DB.active = b.dataset.sp; save(); lockNow(); });
   $$('#profList [data-ep]').forEach(b => b.onclick = editProfile);
 }
@@ -2789,7 +2985,7 @@ $('#chPin').onclick = () => setPinFlow(P, () => { save(); toast('เปลี่
 
 /* ================= ข้อมูล ================= */
 $('#expBtn').onclick = () => {
-  const snap = { v:DB.v, active:DB.active, profiles: DB.profiles.map(stripped) };
+  const snap = { v:DB.v, active:DB.active, customDrugs: DB.customDrugs || [], profiles: DB.profiles.map(stripped) };
   const blob = new Blob([JSON.stringify(snap, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -3403,6 +3599,11 @@ const DICT = {
 'อ้วนระดับ 1':'obesity class 1','อ้วนระดับ 2':'obesity class 2',
 'เกณฑ์สำหรับผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก ไม่ใช้กับเด็ก หญิงตั้งครรภ์ และนักกีฬา':
  'WHO Asian adult cut-offs. Not for children, pregnancy or athletes.',
+'ชื่อตัวยาหรืออาหารเสริม':'Medicine or supplement name',
+'พิมพ์ชื่อสามัญหรือชื่อการค้า เช่น ซาร่า พารา Panadol':'Type a generic or brand name, e.g. Sara, Panadol',
+'ยังไม่มีชื่อนี้ในคลัง เพิ่มเข้าคลังยาส่วนตัว':'Not in the library yet — add it to my drug library',
+'คลังยาส่วนตัว':'My drug library','ยาที่คุณเพิ่มเองนอกเหนือจากคลังหลัก':'Drugs you added beyond the built-in library',
+'เปิดคลังยาส่วนตัว':'Open my drug library','เพิ่มเอง':'Added by me',
 'คำถามกู้รหัส':'Recovery question','ยังไม่ได้ตั้ง':'Not set yet','ตั้งคำถาม':'Set one',
 'เข้ารหัสข้อมูล':'Encrypt your data','ยังไม่ได้เข้ารหัส':'Not encrypted','ปลดล็อกด้วยใบหน้า':'Unlock with your face','ปลดล็อกด้วยใบหน้าหรือลายนิ้วมือ':'Unlock with face or fingerprint',
 'กำลังตรวจสอบอุปกรณ์':'Checking this device','เลือกได้ 4 หรือ 6 หลัก':'Choose 4 or 6 digits',
@@ -3681,6 +3882,7 @@ async function loadData(){
   const j = await r.json();
   if(!j || !Array.isArray(j.rules) || !Array.isArray(j.catalog) || !j.info) throw new Error('bad data');
   RULES = j.rules; CATALOG = j.catalog; INFO = j.info;
+  BRANDS = j.brands || []; SIZES = j.sizes || {};
 }
 function dataError(e){
   $('#lock').style.display = 'flex';
@@ -3697,8 +3899,10 @@ function dataError(e){
 }
 function boot(){
   load();
+  buildDrugIndex();
   if(!DB.profiles.length) return firstRun();
   migrate(); save();
+  buildDrugIndex();
   lockNow();
 }
 loadData().then(boot).catch(dataError);
