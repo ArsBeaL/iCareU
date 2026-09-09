@@ -367,6 +367,14 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 .limrow p.note{font-size:12.5px;color:var(--warn);background:var(--warn-bg);padding:7px 9px;border-radius:8px;margin:6px 0}
 .limrow .src,.pairrow .src{margin-top:8px;font-size:11.5px;color:var(--ink-3);line-height:1.5}
 .mineflag{font-size:12.5px;line-height:1.6;background:var(--danger-bg);color:var(--danger);border-radius:9px;padding:9px 11px;margin-bottom:10px}
+.datefield{position:relative}
+.datefield .dtxt{display:block;border:1px solid var(--line);border-radius:var(--r-sm);
+  padding:11px 12px;background:var(--card);min-height:var(--tap);font-variant-numeric:tabular-nums}
+.datefield .dtxt i{font-style:normal;color:var(--ink-3)}
+.datefield input[type=date]{position:absolute;inset:0;width:100%;height:100%;opacity:0;padding:0;
+  border:0;cursor:pointer}
+.datefield .dclr{position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:2;
+  width:26px;height:26px;border-radius:50%;background:var(--line-2);color:var(--ink-2);font-size:16px;line-height:1}
 .numrow{display:flex;gap:8px}
 .numrow input{flex:1;min-width:0}
 .numrow select{width:auto;flex:none;max-width:52%}
@@ -519,6 +527,17 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
       <div class="seg" id="langSeg">
         <button data-v="th">ไทย</button>
         <button data-v="en">English</button>
+      </div>
+      <div class="fld" style="margin:14px 0 0">
+        <label class="fl">รูปแบบวันที่</label>
+        <div class="seg" id="dateSeg">
+          <button data-v="dmy">20 ก.ย. 2026</button>
+          <button data-v="thai">20 ก.ย. 2569</button>
+        </div>
+        <div class="seg" id="dateSeg2" style="margin-top:6px">
+          <button data-v="slash">20/09/2026</button>
+          <button data-v="iso">2026-09-20</button>
+        </div>
       </div>
     </div>
 
@@ -1316,10 +1335,24 @@ function fmtGap(m){
   if(m>=60){ const h=m/60, v=(h%1?h.toFixed(1):h); return v + (en ? (v==1?' hour':' hours') : ' ชั่วโมง'); }
   return m + (en ? ' minutes' : ' นาที');
 }
+const MON_ABBR_TH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const MON_ABBR_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function dateStyle(){ return (P && P.settings && P.settings.dateFmt) || 'dmy'; }
+function yearOf(d){ return d.getFullYear() + (dateStyle() === 'thai' ? 543 : 0); }
+/* วันที่แบบสั้น ตามรูปแบบที่ผู้ใช้เลือกไว้ */
+function fmtDate(ds){
+  if(!ds) return '';
+  const d = (typeof ds === 'string') ? parseDate(ds) : ds;
+  const f = dateStyle();
+  if(f === 'iso') return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+  if(f === 'slash') return pad2(d.getDate()) + '/' + pad2(d.getMonth()+1) + '/' + d.getFullYear();
+  if(f === 'thai') return d.getDate() + ' ' + MON_ABBR_TH[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+  return d.getDate() + ' ' + (LANG === 'en' ? MON_ABBR_EN : MON_ABBR_TH)[d.getMonth()] + ' ' + d.getFullYear();
+}
 function thDate(d){
   if(typeof LANG !== 'undefined' && LANG === 'en')
-    return EN_DOW[d.getDay()] + ', ' + d.getDate() + ' ' + EN_MON[d.getMonth()] + ' ' + d.getFullYear();
-  return TH_DOW[d.getDay()]+'ที่ '+d.getDate()+' '+TH_MON[d.getMonth()]+' '+(d.getFullYear()+543);
+    return EN_DOW[d.getDay()] + ', ' + d.getDate() + ' ' + EN_MON[d.getMonth()] + ' ' + yearOf(d);
+  return TH_DOW[d.getDay()]+'ที่ '+d.getDate()+' '+TH_MON[d.getMonth()]+' '+yearOf(d);
 }
 
 function blank(){
@@ -1342,7 +1375,7 @@ function newProfile(name, emoji){
     id:uid(), name:name, emoji:emoji||'🧑',
     pin:null, salt:null,
     body:{sex:'', birth:null, weight:null, height:null, pregnant:false},
-    settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:1, autoLock:5, lang:'th' },
+    settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:1, autoLock:5, lang:'th', dateFmt:'dmy' },
     meds:[], logs:{}, notified:{}, snoozes:{}
   };
 }
@@ -1465,11 +1498,11 @@ async function encryptProfile(pin, answer){
   const clear = {};
   VAULT_FIELDS.forEach(f => clear[f] = P[f]);
   P.vault = await sealJSON(clear);
-  delete P.bio;
   save();
+  if(P.bio) await bioWrapDEK();
 }
 async function decryptProfile(){
-  delete P.vault; delete P.wrapPin; delete P.wrapAns;
+  delete P.vault; delete P.wrapPin; delete P.wrapAns; delete P.wrapBio; delete P.bioKeyPlain;
   DEK = null;
   save();
 }
@@ -1752,8 +1785,8 @@ function encryptSheet(){
     '<input id="encPin" type="password" inputmode="numeric" autocomplete="off" maxlength="6" style="letter-spacing:.3em;text-align:center;font-size:19px"></div>'+
     '<div class="adv" style="margin-bottom:14px">' + Lx('คำถามกู้รหัสที่ตั้งไว้','Your recovery question') + '<br><b>' + esc(qText(P.q)) + '</b></div>'+
     '<p style="font-size:12.5px;color:var(--warn);background:var(--warn-bg);padding:10px 12px;border-radius:9px;margin:0 0 14px;line-height:1.6">' +
-    Lx('เมื่อเปิดแล้ว การปลดล็อกด้วยใบหน้าจะถูกปิด เพราะระบบต้องใช้รหัส PIN ในการถอดกุญแจ และไฟล์สำรองที่ส่งออกไปจะถอดได้ด้วยรหัสนี้เท่านั้น',
-       'Turning this on disables face unlock, because the PIN is needed to derive the key. Exported backups will only open with this PIN.') + '</p>'+
+    Lx('ไฟล์สำรองที่ส่งออกไปจะเปิดได้ด้วยรหัส PIN หรือคำตอบกู้รหัสเท่านั้น ถ้าเปิดการปลดล็อกด้วยใบหน้าไว้ ระบบจะขอยืนยันใบหน้าอีกครั้งเพื่อผูกกุญแจให้',
+       'Exported backups will only open with this PIN or your recovery answer. If face unlock is on, you will be asked to confirm it once more so the key can be linked.') + '</p>'+
     '<button class="btn full" id="encGo">' + Lx('เข้ารหัสเลย','Encrypt now') + '</button>');
   $('#encPin').focus();
   $('#encGo').onclick = async () => {
@@ -2214,6 +2247,14 @@ function overText(d){
   });
   return out;
 }
+/* ช่องวันที่ที่แสดงผลตามรูปแบบที่ตั้งไว้ โดยยังใช้ตัวเลือกวันที่ของระบบ */
+function dateField(id, val, ph){
+  return '<div class="datefield">'+
+    '<span class="dtxt">' + (val ? esc(fmtDate(val)) : '<i>' + ph + '</i>') + '</span>'+
+    '<input type="date" id="' + id + '" value="' + esc(val || '') + '">'+
+    (val ? '<button class="dclr" data-clr="' + id + '">×</button>' : '')+
+    '</div>';
+}
 function drawEditor(){
   const d = draft, f = d.freq;
   const ICONS = ['💊','🩹','🧴','💉','🍬','🫙','🌿','🐟','🥛','🍊','🦴','🧬','❤️','🧠','😴'];
@@ -2280,9 +2321,9 @@ function drawEditor(){
         '<button data-v="15">15 นาที</button><button data-v="30">30 นาที</button></div></div>'+
 
     '<div class="two"><div class="fld"><label class="fl">เริ่มกินวันที่</label>'+
-      '<input type="date" id="fStart" value="' + esc(d.start||'') + '"></div>'+
+      dateField('fStart', d.start, 'เลือกวันที่') + '</div>'+
       '<div class="fld"><label class="fl">กินถึงวันที่ (ถ้ามี)</label>'+
-      '<input type="date" id="fEnd" value="' + esc(d.end||'') + '"></div></div>'+
+      dateField('fEnd', d.end, 'ยังไม่กำหนด') + '</div></div>'+
 
     '<div class="card" style="box-shadow:none"><h3>สารสำคัญสำหรับตรวจคู่ยา</h3>'+
       '<p class="h">ระบบเดาให้จากชื่อแล้ว แตะเพื่อแก้ไขได้</p>'+
@@ -2338,6 +2379,12 @@ function drawEditor(){
   ['#fName','#fNameEn','#fNote','#fStart','#fEnd','#fEvery','#fMealGap','#fStock','#fPerDose','#fStrength','#fAlert']
     .forEach(s => { const e = $(s); if(e) e.oninput = sync; });
   ['#fUnit','#fSUnit'].forEach(s => { const e = $(s); if(e) e.onchange = () => { sync(); drawEditor(); }; });
+  ['#fStart','#fEnd'].forEach(s => { const e = $(s); if(e) e.onchange = () => { sync(); drawEditor(); }; });
+  $$('#edBody [data-clr]').forEach(b => b.onclick = e => {
+    e.preventDefault(); e.stopPropagation();
+    sync(); if(b.dataset.clr === 'fEnd') d.end = ''; else d.start = '';
+    drawEditor();
+  });
   $('#fPick').onclick = () => {
     sync();
     catalogPicker(x => {
@@ -2456,7 +2503,8 @@ function dayScore(dstr){
 function renderCal(){
   calCursor = calCursor || new Date();
   const y = calCursor.getFullYear(), m = calCursor.getMonth();
-  $('#calTitle').textContent = LANG === 'en' ? EN_MON[m] + ' ' + y : TH_MON[m] + ' ' + (y + 543);
+  const yy = y + (dateStyle() === 'thai' ? 543 : 0);
+  $('#calTitle').textContent = LANG === 'en' ? EN_MON[m] + ' ' + yy : TH_MON[m] + ' ' + yy;
   const first = new Date(y, m, 1).getDay(), last = new Date(y, m+1, 0).getDate();
   const ts = todayStr();
   let h = TH_DOW_S.map(d => '<div class="dow">' + d + '</div>').join('');
@@ -2552,15 +2600,27 @@ $('#ckRun').onclick = () => {
   const uniq = found.filter(f => { const k = [f.a,f.b,f.r.t].sort().join('|'); if(seen.has(k)) return false; seen.add(k); return true; });
   uniq.sort((x,y) => ({high:0,mod:1,low:2,good:3})[x.r.sev] - ({high:0,mod:1,low:2,good:3})[y.r.sev]);
   const sevTx = {high:'ห้ามกินพร้อมกัน', mod:'ควรเว้นระยะ', low:'ระวัง', good:'เสริมกันดี'};
-  $('#ckOut').innerHTML = '<div class="card"><h3>ผลการตรวจ</h3>'+
-    '<p class="h">' + (uniq.length ? 'พบ ' + uniq.length + ' รายการที่ควรทราบ' : 'ไม่พบคู่ที่ต้องระวังในฐานข้อมูลของแอป') + '</p>'+
+  const pairsChecked = [];
+  for(let i=0;i<ckPicked.length;i++)
+    for(let j=i+1;j<ckPicked.length;j++) pairsChecked.push(ckPicked[i].label + ' + ' + ckPicked[j].label);
+  const bad = uniq.filter(f => f.r.sev !== 'good');
+  $('#ckOut').innerHTML = '<div class="card"><h3>' + Lx('ผลการตรวจ','Results') + '</h3>'+
+    '<p class="h">' + Lx('ตรวจแล้ว ' + pairsChecked.length + ' คู่ ',
+                         'Checked ' + pairsChecked.length + ' pairs — ') +
+      (bad.length ? Lx('พบ ' + bad.length + ' คู่ที่ต้องระวัง','found ' + bad.length + ' to watch')
+                  : Lx('ไม่พบคู่ที่ต้องระวัง','none need watching')) + '</p>'+
+    '<div class="adv" style="margin-bottom:12px">' + Lx('คู่ที่ตรวจ','Pairs checked') + '<br>' +
+      pairsChecked.map(x => esc(x)).join('<br>') + '</div>'+
     (uniq.length ? uniq.map(f =>
       '<div class="res" style="box-shadow:none"><div class="hd"><b>' + esc(f.a) + ' + ' + esc(f.b) + '</b>'+
       '<span class="sev ' + f.r.sev + '">' + sevTx[f.r.sev] + '</span></div>'+
       '<p><b style="color:var(--ink)">' + esc(RT(f.r,'t')) + '</b><br>' + esc(RT(f.r,'d')) + '</p>'+
       '<div class="adv">' + esc(RT(f.r,'x')) + '</div>'+
       '<div class="src">อ้างอิง: ' + esc(f.r.s) + '</div></div>').join('')
-      : '<p style="font-size:13.5px;color:var(--ink-2);margin:0">ไม่พบไม่ได้แปลว่าปลอดภัยเสมอไป ฐานข้อมูลนี้ครอบคลุมคู่ที่พบบ่อยเท่านั้น ถ้ามีข้อสงสัยให้ถามเภสัชกร</p>')+
+      : '')+
+    (bad.length ? '' : '<p style="font-size:13.5px;color:var(--ink-2);margin:0;line-height:1.65">' +
+      Lx('การไม่พบแปลว่าคู่นี้ไม่มีปฏิกิริยาที่บันทึกไว้ในฐานข้อมูล ซึ่งมีทั้งกรณีที่ใช้ร่วมกันได้จริงและกรณีที่ยังไม่ได้เก็บไว้ ฐานข้อมูลนี้ครอบคลุมคู่ที่พบบ่อยและมีเอกสารอ้างอิงชัดเจนเท่านั้น ถ้ามีข้อสงสัยให้ถามเภสัชกรที่จ่ายยาให้คุณ',
+         'Finding nothing means no interaction is recorded for this pair. That covers both genuinely safe combinations and ones not yet in the database, which holds only common, well-documented pairs. Ask the pharmacist who dispensed your medicine if you are unsure.') + '</p>')+
     '</div>';
   $('#ckOut').scrollIntoView({behavior:'smooth', block:'nearest'});
 };
@@ -2734,26 +2794,65 @@ async function bioAvailable(){
 async function bioRegister(){
   const ch = crypto.getRandomValues(new Uint8Array(32));
   const uid8 = crypto.getRandomValues(new Uint8Array(16));
+  const salt = crypto.getRandomValues(new Uint8Array(32));
   const cred = await navigator.credentials.create({ publicKey:{
     challenge: ch,
     rp:{ name:'ตารางยา' },
     user:{ id: uid8, name: (P.name || 'user') + '@' + P.id, displayName: P.name || 'user' },
     pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
     authenticatorSelection:{ authenticatorAttachment:'platform', userVerification:'required', residentKey:'preferred' },
-    timeout: 60000, attestation:'none'
+    timeout: 60000, attestation:'none',
+    extensions:{ prf:{} }
   }});
   if(!cred) throw new Error('no credential');
   P.bio = b64u(cred.rawId);
+  P.bioSalt = b64u(salt);
+  const ext = cred.getClientExtensionResults ? cred.getClientExtensionResults() : {};
+  P.bioPrf = !!(ext.prf && ext.prf.enabled);
   save();
+  if(P.vault) await bioWrapDEK();
+}
+/* ห่อกุญแจข้อมูลไว้ให้ใบหน้าหรือลายนิ้วมือเปิดได้ */
+async function bioWrapDEK(){
+  if(!P.vault || !DEK || !P.bio) return false;
+  const raw = await crypto.subtle.exportKey('raw', DEK);
+  const v = await bioVerify();
+  let secret = v && v.secret;
+  if(secret){
+    delete P.bioKeyPlain;
+  } else {
+    const okConvenience = confirm(Lx(
+      'อุปกรณ์นี้ไม่รองรับการสร้างกุญแจจากใบหน้าโดยตรง\n\n' +
+      'ถ้าเปิดต่อ ระบบจะเก็บกุญแจสำรองไว้ในเครื่องนี้ ข้อมูลจะยังเข้ารหัสอยู่และไฟล์ที่คัดลอกออกไปเปิดไม่ได้ ' +
+      'แต่คนที่ใช้เครื่องนี้และเปิดเครื่องมือนักพัฒนาเป็น จะเปิดข้อมูลได้โดยไม่ต้องรู้รหัส PIN\n\n' +
+      'ต้องการเปิดใช้แบบสะดวกนี้หรือไม่',
+      'This device cannot derive a key from your face directly.\n\n' +
+      'If you continue, a backup key is stored on this device. The data stays encrypted and a copied file cannot be opened, ' +
+      'but anyone using this device who knows how to open developer tools could read it without your PIN.\n\n' +
+      'Turn on this convenience mode?'));
+    if(!okConvenience){ delete P.bio; delete P.bioSalt; delete P.bioPrf; save(); return false; }
+    secret = b64u(crypto.getRandomValues(new Uint8Array(32)));
+    P.bioKeyPlain = secret;
+  }
+  P.wrapBio = await wrapDEK(raw, secret);
+  save();
+  return true;
 }
 async function bioVerify(){
-  const ch = crypto.getRandomValues(new Uint8Array(32));
-  const res = await navigator.credentials.get({ publicKey:{
-    challenge: ch,
+  const pk = {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
     allowCredentials:[{ type:'public-key', id: unb64u(P.bio) }],
     userVerification:'required', timeout: 60000
-  }});
-  return !!res;
+  };
+  if(P.bioSalt) pk.extensions = { prf:{ eval:{ first: unb64u(P.bioSalt) } } };
+  const res = await navigator.credentials.get({ publicKey: pk });
+  if(!res) return null;
+  let secret = null;
+  try{
+    const r = res.getClientExtensionResults().prf;
+    if(r && r.results && r.results.first) secret = b64u(r.results.first);
+  }catch(e){}
+  return { ok:true, secret:secret };
 }
 let bioTried = false;
 async function bioUnlock(auto){
@@ -2761,8 +2860,22 @@ async function bioUnlock(auto){
   const btn = $('#lkBio');
   try{
     if(btn) btn.disabled = true;
-    const ok = await bioVerify();
-    if(ok) enterApp();
+    const v = await bioVerify();
+    if(!v) throw new Error('cancelled');
+    if(P.vault){
+      const secret = v.secret || P.bioKeyPlain;
+      const w = secret ? await unwrapDEK(P.wrapBio, secret) : null;
+      if(!w){
+        $('#lkMsg').textContent = Lx('เปิดข้อมูลด้วยใบหน้าไม่สำเร็จ ใช้รหัส PIN แทน',
+                                     'Could not open your data with face unlock — use your PIN');
+        return;
+      }
+      DEK = w.key;
+      const obj = await openJSON(P.vault);
+      VAULT_FIELDS.forEach(f => { P[f] = obj[f] !== undefined ? obj[f] : (f === 'meds' ? [] : {}); });
+      P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false}, P.body || {});
+    }
+    enterApp();
   }catch(e){
     if(!auto) $('#lkMsg').textContent = Lx('ยังปลดล็อกด้วยใบหน้าไม่ได้ ใช้รหัส PIN แทนได้',
                                            'Face unlock did not work — you can use your PIN instead');
@@ -2810,6 +2923,14 @@ function renderSettings(){
   $('#nagOn').classList.toggle('on', !!s.nag);
   $$('#leadSeg button').forEach(b => b.classList.toggle('on', +b.dataset.v === s.lead));
   $$('#langSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === LANG));
+  $$('#dateSeg button, #dateSeg2 button').forEach(b => {
+    b.classList.toggle('on', b.dataset.v === dateStyle());
+    b.onclick = () => { P.settings.dateFmt = b.dataset.v; save(); renderSettings(); renderToday(); renderCal(); };
+  });
+  if(LANG === 'en'){
+    const m = $('#dateSeg button[data-v="dmy"]'); if(m) m.textContent = '20 Sep 2026';
+    const t = $('#dateSeg button[data-v="thai"]'); if(t) t.textContent = '20 Sep 2569';
+  }
   $('#autoLock').value = String(s.autoLock);
   $('#qState').textContent = P.q ? qText(P.q) : Lx('ยังไม่ได้ตั้ง','Not set yet');
   $('#qBtn').textContent = P.q ? Lx('แก้ไข','Edit') : Lx('ตั้งคำถาม','Set one');
@@ -2827,11 +2948,7 @@ function renderSettings(){
   bioAvailable().then(av => {
     const st = $('#bioState'), sw = $('#bioOn');
     if(!st) return;
-    if(P.vault){
-      st.textContent = Lx('ใช้ร่วมกับการเข้ารหัสไม่ได้ เพราะต้องใช้รหัส PIN ถอดกุญแจ',
-                          'Not available with encryption on — the PIN is needed to derive the key');
-      sw.disabled = true; sw.style.opacity = '.45';
-    } else if(!bioSupported()){
+    if(!bioSupported()){
       st.textContent = Lx('ต้องเปิดผ่าน https จึงจะใช้ได้ เปิดจากไฟล์โดยตรงใช้ไม่ได้',
                           'Needs an https address — opening the file directly will not work');
       sw.disabled = true; sw.style.opacity = '.45';
@@ -2840,7 +2957,9 @@ function renderSettings(){
                           'This device has no Face ID or fingerprint set up');
       sw.disabled = true; sw.style.opacity = '.45';
     } else {
-      st.textContent = P.bio ? Lx('เปิดอยู่ ยังใช้รหัส PIN สำรองได้เสมอ','On — your PIN still works as a fallback')
+      st.textContent = P.bio ? (P.bioKeyPlain
+          ? Lx('เปิดอยู่ แบบสะดวก กุญแจสำรองเก็บไว้ในเครื่องนี้','On in convenience mode — a backup key is stored on this device')
+          : Lx('เปิดอยู่ ยังใช้รหัส PIN สำรองได้เสมอ','On — your PIN still works as a fallback'))
                              : Lx('ใช้ Face ID หรือลายนิ้วมือของเครื่องแทนการกดรหัส',
                                   'Use the device Face ID or fingerprint instead of typing a PIN');
       sw.disabled = false; sw.style.opacity = '';
@@ -2962,11 +3081,11 @@ $('#addProf').onclick = () => {
   };
 };
 $('#bioOn').onclick = async () => {
-  if(P.vault){ toast(Lx('ปิดการเข้ารหัสก่อนจึงจะใช้ใบหน้าได้','Turn off encryption first to use face unlock')); return; }
   if(P.bio){
     if(!confirm(Lx('ปิดการปลดล็อกด้วยใบหน้าใช่หรือไม่ ต่อไปต้องใช้รหัส PIN อย่างเดียว',
                    'Turn off face unlock? You will need your PIN from then on.'))) return;
-    delete P.bio; save(); renderSettings(); toast(Lx('ปิดแล้ว','Turned off'));
+    delete P.bio; delete P.bioSalt; delete P.bioPrf; delete P.wrapBio; delete P.bioKeyPlain;
+    save(); renderSettings(); toast(Lx('ปิดแล้ว','Turned off'));
     return;
   }
   try{
@@ -3599,6 +3718,7 @@ const DICT = {
 'อ้วนระดับ 1':'obesity class 1','อ้วนระดับ 2':'obesity class 2',
 'เกณฑ์สำหรับผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก ไม่ใช้กับเด็ก หญิงตั้งครรภ์ และนักกีฬา':
  'WHO Asian adult cut-offs. Not for children, pregnancy or athletes.',
+'รูปแบบวันที่':'Date format','เลือกวันที่':'Pick a date','ยังไม่กำหนด':'Not set',
 'ชื่อตัวยาหรืออาหารเสริม':'Medicine or supplement name',
 'พิมพ์ชื่อสามัญหรือชื่อการค้า เช่น ซาร่า พารา Panadol':'Type a generic or brand name, e.g. Sara, Panadol',
 'ยังไม่มีชื่อนี้ในคลัง เพิ่มเข้าคลังยาส่วนตัว':'Not in the library yet — add it to my drug library',
@@ -3860,7 +3980,7 @@ function firstRun(){
 }
 function migrate(){
   DB.profiles.forEach(p => {
-    p.settings = Object.assign({theme:'pandan',dark:0,custom:null,customOn:0,lead:5,sound:1,nag:1,autoLock:5,lang:'th'}, p.settings||{});
+    p.settings = Object.assign({theme:'pandan',dark:0,custom:null,customOn:0,lead:5,sound:1,nag:1,autoLock:5,lang:'th',dateFmt:'dmy'}, p.settings||{});
     p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false}, p.body || {});
     p.logs = p.logs || {}; p.notified = p.notified || {}; p.snoozes = p.snoozes || {}; p.meds = p.meds || [];
     p.meds.forEach(m => {
