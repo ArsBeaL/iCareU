@@ -18,7 +18,7 @@ python3 -m http.server 8000
 ```bash
 git init
 git add .
-git commit -m "ตารางยา"
+git commit -m "iCare"
 git branch -M main
 git remote add origin https://github.com/<ชื่อผู้ใช้>/<ชื่อ repo>.git
 git push -u origin main

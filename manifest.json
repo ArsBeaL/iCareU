@@ -1,6 +1,6 @@
 {
-  "name": "ตารางยา — บันทึกยาและอาหารเสริม",
-  "short_name": "ตารางยา",
+  "name": "iCare — บันทึกยาและอาหารเสริม",
+  "short_name": "iCare",
   "description": "บันทึกยาและอาหารเสริมที่ต้องกินเป็นเวลา เตือนล่วงหน้า และตรวจคู่ที่ห้ามกินร่วมกัน",
   "start_url": "./index.html",
   "scope": "./",
@@ -10,7 +10,29 @@
   "theme_color": "#128A6E",
   "lang": "th",
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

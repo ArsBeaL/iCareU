@@ -4,11 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#128A6E">
-<title>ตารางยา — บันทึกยาและอาหารเสริม</title>
+<title>iCare — บันทึกยาและอาหารเสริม</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-title" content="iCare">
+<meta name="application-name" content="iCare">
 <link rel="manifest" href="manifest.json">
 <style>
 /* ============================================================
-   ตารางยา — design tokens
+   iCare — design tokens
    ============================================================ */
 :root{
   --paper:#F5F7F8;
@@ -397,7 +402,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 <!-- ============ LOCK SCREEN ============ -->
 <div id="lock">
   <div class="lav" id="lkAv">🧑</div>
-  <h1 id="lkName">ตารางยา</h1>
+  <h1 id="lkName">iCare</h1>
   <p id="lkMsg">ใส่รหัส PIN เพื่อเข้าใช้งาน</p>
   <div class="seg hide" id="lkLen" style="max-width:230px;width:100%;margin:0 0 18px">
     <button data-n="4">4 หลัก</button>
@@ -691,7 +696,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 <script>
 "use strict";
 /* ================================================================
-   ตารางยา — บันทึกยาและอาหารเสริม
+   iCare — บันทึกยาและอาหารเสริม
    single-file / localStorage / offline
    ================================================================ */
 
@@ -1211,6 +1216,8 @@ function renderWater(){
   const total = doses.reduce((n,x) => n + ml(x), 0);
   const done = doses.filter(x => x.status === 'taken').reduce((n,x) => n + ml(x), 0);
   const pct = total ? Math.round(done / total * 100) : 0;
+  const w = P.body && P.body.weight;
+  const tgt = w ? Math.round(w * 32 / 50) * 50 : null;
   host.innerHTML = '<div class="card" style="box-shadow:none;background:var(--card-2);margin-bottom:18px">'+
     '<div style="display:flex;align-items:center;gap:11px;margin-bottom:9px">'+
       '<span class="pill" style="background:color-mix(in srgb,#2A9DE0 16%,transparent)">💧</span>'+
@@ -1219,7 +1226,12 @@ function renderWater(){
         (total ? Lx('ดื่มแล้ว ','') + fmtAmt(done,'mL') + Lx(' จาก ',' of ') + fmtAmt(total,'mL')
                : Lx('ยังไม่ได้กรอกปริมาณต่อแก้ว','No volume set per serving')) + '</span></span>'+
       '<b class="num" style="font-size:17px;color:#2A9DE0">' + pct + '%</b></div>'+
-    '<div class="bar"><i style="width:' + Math.min(100,pct) + '%;background:#2A9DE0"></i></div></div>';
+    '<div class="bar"><i style="width:' + Math.min(100,pct) + '%;background:#2A9DE0"></i></div>'+
+    (tgt ? '<p style="font-size:12px;color:var(--ink-3);margin:9px 0 0;line-height:1.5">' +
+      Lx('น้ำหนัก ' + w + ' กก. ต้องการน้ำราว ','At ' + w + ' kg you need about ') + fmtAmt(tgt,'mL') +
+      Lx(' ต่อวัน ตารางที่ตั้งไว้คิดเป็น ',' a day — your schedule covers ') + Math.round(total / tgt * 100) + '%' +
+      Lx('','') + '</p>' : '')+
+    '</div>';
 }
 
 /* ---- ยาที่ใกล้หมด ---- */
@@ -1674,11 +1686,13 @@ function knownDrug(d){
 }
 
 let sugList = [];
-function renderSug(inputSel, boxSel){
+function renderSug(inputSel, boxSel, kind){
   const box = $(boxSel), inp = $(inputSel);
   if(!box || !inp) return;
   const q = inp.value;
   sugList = searchDrugs(q, 8);
+  if(kind === 'water') sugList = sugList.filter(x => x.kind === 'water');
+  else if(kind) sugList = sugList.filter(x => x.kind !== 'water');
   if(!q.trim() || !sugList.length){ box.innerHTML = ''; return; }
   box.innerHTML = sugList.map((x,i) =>
     '<button data-s="' + i + '">' + esc(drugLabel(x)) +
@@ -1698,6 +1712,7 @@ function pickDrug(x){
   if(x.st) d.strength = x.st;
   if(x.su) d.strengthUnit = x.su;
   d.type = (x.kind === 'supp' || x.kind === 'water') ? x.kind : 'med';
+  if(d.type === 'water'){ d.nameEn = ''; d.gen = null; d.tags = []; d.tagsOff = []; d.avoid = []; d.stockOn = false; d.strengthUnit = 'mL'; if(!d.icon || d.icon === '💊') d.icon = '💧'; }
   openEditorSheet();
 }
 /* แถบชื่อสามัญ ยี่ห้ออื่น และขนาดที่มีขาย */
@@ -2056,6 +2071,7 @@ function sortTags(keys){
   return keys.slice().sort((a,b) => tagLabel(a).localeCompare(tagLabel(b), loc, {numeric:true, sensitivity:'base'}));
 }
 function medTags(m){
+  if(m && m.type === 'water') return (m.tags || []).filter(k => !(m.tagsOff || []).includes(k));
   const set = new Set(m.tags || []);
   const hay = ((m.name||'') + ' ' + (m.nameEn||'')).toLowerCase();
   for(const k in TAGS) if(TAGS[k].kw.some(w => hay.includes(w.toLowerCase()))) set.add(k);
@@ -2414,9 +2430,25 @@ function dateField(id, val, ph){
     (val ? '<button class="dclr" data-clr="' + id + '">×</button>' : '')+
     '</div>';
 }
+const WATER_UNITS = ['แก้ว','ขวด','มิลลิลิตร'];
+const WATER_VOL = {'แก้ว':250,'ขวด':600,'มิลลิลิตร':1};
+/* ปรับค่าตั้งต้นเมื่อสลับประเภทไปมา ให้เหมาะกับสิ่งที่กำลังบันทึก */
+function applyTypeDefaults(d, prev){
+  if(d.type === 'water'){
+    if(!WATER_UNITS.includes(d.unit)) d.unit = 'แก้ว';
+    d.strengthUnit = 'mL';
+    if(!d.strength || prev !== 'water') d.strength = WATER_VOL[d.unit] || 250;
+    if(!d.icon || prev !== 'water') d.icon = '💧';
+    d.tags = []; d.tagsOff = []; d.avoid = []; d.nameEn = ''; d.gen = null;
+    d.stockOn = false;
+  } else if(prev === 'water'){
+    d.unit = 'เม็ด'; d.strength = null; d.strengthUnit = 'mg'; d.icon = '💊';
+  }
+}
 function drawEditor(){
   const d = draft, f = d.freq;
-  const ICONS = ['💊','🩹','🧴','💉','🍬','🫙','🌿','🐟','🥛','🍊','🦴','🧬','❤️','🧠','😴'];
+  const isWater = d.type === 'water';
+  const ICONS = isWater ? ['💧','🥛','🫗','🍵','🧊','🥤','🚰','🍶'] : ['💊','🩹','🧴','💉','🍬','🫙','🌿','🐟','🥛','🍊','🦴','🧬','❤️','🧠','😴'];
   $('#edBody').innerHTML =
     '<div class="fld"><label class="fl">ประเภท</label>'+
       '<div class="seg" id="fType"><button data-v="med"' + (d.type==='med'?' class="on"':'') + '>ยา</button>'+
@@ -2426,27 +2458,36 @@ function drawEditor(){
       '<input id="fName" value="' + esc(d.name) + '" autocomplete="off" placeholder="' +
         (d.type === 'water' ? 'เช่น น้ำเปล่า 1 แก้ว' : 'พิมพ์ชื่อสามัญหรือชื่อการค้า เช่น ซาร่า พารา Panadol') + '">'+
       '<div class="tagpick" id="fSug" style="margin-top:8px"></div></div>'+
-    '<div class="fld"><label class="fl">ชื่อภาษาอังกฤษ (ช่วยให้ตรวจคู่ยาแม่นขึ้น)</label>'+
+    (isWater ? '' :
+      '<div class="fld"><label class="fl">ชื่อภาษาอังกฤษ (ช่วยให้ตรวจคู่ยาแม่นขึ้น)</label>'+
       '<input id="fNameEn" value="' + esc(d.nameEn) + '" autocomplete="off" placeholder="Paracetamol">'+
       '<div class="tagpick" id="fSugEn" style="margin-top:8px"></div></div>'+
-    '<div id="fRel">' + relatedBlock(d) + '</div>'+
-    (knownDrug(d) ? '' : '<button class="btn ghost sm full" id="fAddLib" style="margin-bottom:14px">'+
-      'ยังไม่มีชื่อนี้ในคลัง เพิ่มเข้าคลังยาส่วนตัว</button>')+
-    '<div class="two" style="margin-bottom:14px">'+
+      '<div id="fRel">' + relatedBlock(d) + '</div>'+
+      (knownDrug(d) ? '' : '<button class="btn ghost sm full" id="fAddLib" style="margin-bottom:14px">'+
+        'ยังไม่มีชื่อนี้ในคลัง เพิ่มเข้าคลังยาส่วนตัว</button>')+
+      '<div class="two" style="margin-bottom:14px">'+
       '<button class="btn ghost sm" id="fPick" data-tip="เลือกจากรายชื่อยาและอาหารเสริมที่รวบรวมไว้ ไม่ต้องพิมพ์เอง">เลือกจากรายการยา</button>'+
-      '<button class="btn ghost sm" id="fInfo" data-tip="ข้อบ่งใช้ ข้อห้ามใช้ คำเตือน และผลข้างเคียง">ข้อมูลและข้อห้าม</button></div>'+
-    '<div class="two"><div class="fld"><label class="fl">กินครั้งละ</label>'+
-      '<div class="numrow"><input id="fPerDose" type="number" min="0.25" step="0.25" value="' + (d.perDose||1) + '">'+
-      '<select id="fUnit">' + FORM_UNITS.map(u => '<option' + (u===(d.unit||'เม็ด')?' selected':'') + '>' + u + '</option>').join('') + '</select></div></div>'+
-      '<div class="fld"><label class="fl">ปริมาณตัวยาต่อ 1 ' + esc(d.unit||'เม็ด') + '</label>'+
-      '<div class="numrow"><input id="fStrength" type="number" min="0" step="any" placeholder="เช่น 500" value="' + (d.strength==null?'':d.strength) + '">'+
-      '<select id="fSUnit">' + STRENGTH_UNITS.map(x => '<option value="' + x.u + '"' + (x.u===(d.strengthUnit||'mg')?' selected':'') + '>' + x.th + '</option>').join('') + '</select></div></div></div>'+
+      '<button class="btn ghost sm" id="fInfo" data-tip="ข้อบ่งใช้ ข้อห้ามใช้ คำเตือน และผลข้างเคียง">ข้อมูลและข้อห้าม</button></div>')+
+    (isWater
+      ? '<div class="two"><div class="fld"><label class="fl">ดื่มครั้งละ</label>'+
+        '<div class="numrow"><input id="fPerDose" type="number" min="0.25" step="0.25" value="' + (d.perDose||1) + '">'+
+        '<select id="fUnit">' + WATER_UNITS.map(u => '<option' + (u===d.unit?' selected':'') + '>' + u + '</option>').join('') + '</select></div></div>'+
+        (d.unit === 'มิลลิลิตร' ? '<div class="fld"></div>'
+          : '<div class="fld"><label class="fl">ปริมาตรต่อ 1 ' + esc(d.unit) + ' (มล.)</label>'+
+            '<input id="fStrength" type="number" min="1" step="10" value="' + (d.strength || WATER_VOL[d.unit] || 250) + '"></div>')+
+        '</div>'
+      : '<div class="two"><div class="fld"><label class="fl">กินครั้งละ</label>'+
+        '<div class="numrow"><input id="fPerDose" type="number" min="0.25" step="0.25" value="' + (d.perDose||1) + '">'+
+        '<select id="fUnit">' + FORM_UNITS.map(u => '<option' + (u===(d.unit||'เม็ด')?' selected':'') + '>' + u + '</option>').join('') + '</select></div></div>'+
+        '<div class="fld"><label class="fl">ปริมาณตัวยาต่อ 1 ' + esc(d.unit||'เม็ด') + '</label>'+
+        '<div class="numrow"><input id="fStrength" type="number" min="0" step="any" placeholder="เช่น 500" value="' + (d.strength==null?'':d.strength) + '">'+
+        '<select id="fSUnit">' + STRENGTH_UNITS.map(x => '<option value="' + x.u + '"' + (x.u===(d.strengthUnit||'mg')?' selected':'') + '>' + x.th + '</option>').join('') + '</select></div></div></div>')+
     '<p style="font-size:12.5px;color:var(--ink-3);margin:-6px 0 14px;line-height:1.55" id="fDosePv"></p>'+
 
     '<div class="fld"><label class="fl">ไอคอน</label><div class="tagpick" id="fIcon">'+
       ICONS.map(i => '<button data-i="' + i + '"' + (d.icon===i?' class="on"':'') + ' style="font-size:17px;padding:5px 9px">' + i + '</button>').join('') + '</div></div>'+
 
-    '<div class="fld"><label class="fl">เวลาที่ต้องกิน</label><div class="times" id="fTimes">'+
+    '<div class="fld"><label class="fl">' + (isWater ? 'เวลาที่ต้องดื่ม' : 'เวลาที่ต้องกิน') + '</label><div class="times" id="fTimes">'+
       d.times.map((t,i) => '<span class="tpill num">' + t + '<button data-rm="' + i + '">×</button></span>').join('')+
       '<button class="btn sm ghost" id="addTime">+ เพิ่มเวลา</button></div></div>'+
 
@@ -2480,31 +2521,31 @@ function drawEditor(){
         '<button data-v="0">ตรงเวลา</button><button data-v="5">5 นาที</button>'+
         '<button data-v="15">15 นาที</button><button data-v="30">30 นาที</button></div></div>'+
 
-    '<div class="two"><div class="fld"><label class="fl">เริ่มกินวันที่</label>'+
+    '<div class="two"><div class="fld"><label class="fl">' + (isWater ? 'เริ่มวันที่' : 'เริ่มกินวันที่') + '</label>'+
       dateField('fStart', d.start, 'เลือกวันที่') + '</div>'+
-      '<div class="fld"><label class="fl">กินถึงวันที่ (ถ้ามี)</label>'+
+      '<div class="fld"><label class="fl">' + (isWater ? 'ถึงวันที่ (ถ้ามี)' : 'กินถึงวันที่ (ถ้ามี)') + '</label>'+
       dateField('fEnd', d.end, 'ยังไม่กำหนด') + '</div></div>'+
 
-    '<div class="card" style="box-shadow:none"><h3>สารสำคัญสำหรับตรวจคู่ยา</h3>'+
+    (isWater ? '' : '<div class="card" style="box-shadow:none"><h3>สารสำคัญสำหรับตรวจคู่ยา</h3>'+
       '<p class="h">ระบบเดาให้จากชื่อแล้ว แตะเพื่อแก้ไขได้</p>'+
       '<div class="tagpick" id="fTags">' + sortTags(Object.keys(TAGS)).map(k =>
-        '<button data-t="' + k + '"' + (medTags(d).includes(k)?' class="on"':'') + '>' + esc(TAGS[k].th) + '</button>').join('') + '</div></div>'+
+        '<button data-t="' + k + '"' + (medTags(d).includes(k)?' class="on"':'') + '>' + esc(TAGS[k].th) + '</button>').join('') + '</div></div>')+
 
-    (P.meds.filter(m => m.id !== d.id).length ?
+    (!isWater && P.meds.filter(m => m.id !== d.id).length ?
       '<div class="card" style="box-shadow:none"><h3>ห้ามกินคู่กับ (กำหนดเอง)</h3>'+
       '<p class="h">เลือกรายการที่แพทย์หรือเภสัชกรสั่งไม่ให้กินพร้อมกัน</p>'+
       '<div class="tagpick" id="fAvoid">' + P.meds.filter(m => m.id !== d.id).map(m =>
         '<button data-a="' + m.id + '"' + ((d.avoid||[]).includes(m.id)?' class="on"':'') + '>' + esc(m.name) + '</button>').join('') + '</div></div>' : '')+
 
-    '<div class="card" style="box-shadow:none"><div class="row"><div class="g"><b>นับจำนวนคงเหลือ</b>'+
+    (isWater ? '' : '<div class="card" style="box-shadow:none"><div class="row"><div class="g"><b>นับจำนวนคงเหลือ</b>'+
       '<span>เตือนเมื่อยาใกล้หมด</span></div><button class="sw' + (d.stockOn?' on':'') + '" id="fStockOn"></button></div>'+
       (d.stockOn ? '<div class="two" style="margin-top:12px">'+
         '<div><label class="fl">คงเหลือ (' + esc(d.unit||'เม็ด') + ')</label><input id="fStock" type="number" min="0" value="' + (d.stock||0) + '"></div>'+
         '<div><label class="fl">เตือนเมื่อเหลือ</label><input id="fAlert" type="number" min="0" value="' + (d.stockAlert||7) + '"></div></div>' : '')+
-    '</div>'+
+    '</div>')+
 
     '<div class="fld"><label class="fl">บันทึกเพิ่มเติม</label>'+
-      '<textarea id="fNote" rows="2" placeholder="เช่น กินพร้อมน้ำเต็มแก้ว">' + esc(d.note||'') + '</textarea></div>'+
+      '<textarea id="fNote" rows="2" placeholder="' + (isWater ? 'เช่น ดื่มช้า ๆ ไม่รวดเดียว' : 'เช่น กินพร้อมน้ำเต็มแก้ว') + '">' + esc(d.note||'') + '</textarea></div>'+
 
     '<div class="row"><div class="g"><b>ใช้รายการนี้อยู่</b><span>ปิดไว้ถ้าหยุดกินชั่วคราว</span></div>'+
       '<button class="sw' + (d.active?' on':'') + '" id="fActive"></button></div>';
@@ -2525,27 +2566,46 @@ function drawEditor(){
     if(g('#fUnit')) d.unit = g('#fUnit').value;
     if(g('#fStrength')) d.strength = g('#fStrength').value === '' ? null : Math.max(0, +g('#fStrength').value);
     if(g('#fSUnit')) d.strengthUnit = g('#fSUnit').value;
-    d.dose = (d.perDose || 1) + ' ' + (d.unit || 'เม็ด') + (d.strength ? ' (' + fmtAmt((d.perDose||1) * d.strength, d.strengthUnit) + ')' : '');
+    if(d.type === 'water'){
+      d.strengthUnit = 'mL';
+      if(d.unit === 'มิลลิลิตร') d.strength = 1;
+      if(!d.strength) d.strength = WATER_VOL[d.unit] || 250;
+    }
+    d.dose = (d.perDose || 1) + ' ' + (d.unit || 'เม็ด') + (d.strength && d.type !== 'water' ? ' (' + fmtAmt((d.perDose||1) * d.strength, d.strengthUnit) + ')' : '');
     const pv = g('#fDosePv');
     if(pv){
       const per = (d.perDose||1), n = (d.times||[]).length;
-      pv.innerHTML = d.strength
-        ? 'ครั้งละ ' + esc(fmtAmt(per * d.strength, d.strengthUnit)) + ' · วันละ ' + n + ' ครั้ง รวม ' +
-          esc(fmtAmt(per * d.strength * n, d.strengthUnit)) + ' ต่อวัน' + overText(d)
-        : 'กรอกปริมาณตัวยาต่อหน่วยไว้ ระบบจะช่วยรวมยอดต่อวันและเตือนเมื่อได้รับเกินขนาด';
+      if(d.type === 'water'){
+        const day = per * (d.strength || 0) * n;
+        const w = P.body && P.body.weight;
+        const tgt = w ? Math.round(w * 32 / 50) * 50 : null;
+        pv.innerHTML = 'ครั้งละ ' + esc(fmtAmt(per * (d.strength||0), 'mL')) + ' · วันละ ' + n + ' ครั้ง รวม ' +
+          esc(fmtAmt(day, 'mL')) + ' ต่อวัน' +
+          (tgt ? '<br>ร่างกายคุณที่ ' + w + ' กก. ต้องการน้ำราว ' + esc(fmtAmt(tgt, 'mL')) +
+            ' ต่อวัน ตอนนี้ตั้งไว้ ' + Math.round(day / tgt * 100) + '%' : '');
+      } else {
+        pv.innerHTML = d.strength
+          ? 'ครั้งละ ' + esc(fmtAmt(per * d.strength, d.strengthUnit)) + ' · วันละ ' + n + ' ครั้ง รวม ' +
+            esc(fmtAmt(per * d.strength * n, d.strengthUnit)) + ' ต่อวัน' + overText(d)
+          : 'กรอกปริมาณตัวยาต่อหน่วยไว้ ระบบจะช่วยรวมยอดต่อวันและเตือนเมื่อได้รับเกินขนาด';
+      }
     }
     if(g('#fAlert')) d.stockAlert = +g('#fAlert').value || 0;
   };
   ['#fName','#fNameEn','#fNote','#fStart','#fEnd','#fEvery','#fMealGap','#fStock','#fPerDose','#fStrength','#fAlert']
     .forEach(s => { const e = $(s); if(e) e.oninput = sync; });
-  ['#fUnit','#fSUnit'].forEach(s => { const e = $(s); if(e) e.onchange = () => { sync(); drawEditor(); }; });
+  ['#fUnit','#fSUnit'].forEach(s => { const e = $(s); if(e) e.onchange = () => {
+    sync();
+    if(d.type === 'water'){ d.strength = WATER_VOL[d.unit] || d.strength; }
+    drawEditor();
+  }; });
   ['#fStart','#fEnd'].forEach(s => { const e = $(s); if(e) e.onchange = () => { sync(); drawEditor(); }; });
   $$('#edBody [data-clr]').forEach(b => b.onclick = e => {
     e.preventDefault(); e.stopPropagation();
     sync(); if(b.dataset.clr === 'fEnd') d.end = ''; else d.start = '';
     drawEditor();
   });
-  $('#fPick').onclick = () => {
+  if($('#fPick')) $('#fPick').onclick = () => {
     sync();
     catalogPicker(x => {
       const it = x.it;
@@ -2556,18 +2616,22 @@ function drawEditor(){
       toast('เลือก ' + it[0] + ' แล้ว ปรับขนาดและเวลาได้ตามที่แพทย์สั่ง');
     }, openEditorSheet);
   };
-  $('#fInfo').onclick = () => { sync(); infoSheet(medTags(d), d.name || Lx('รายการนี้','this item'), d.nameEn, null, d.id, openEditorSheet); };
+  if($('#fInfo')) $('#fInfo').onclick = () => { sync(); infoSheet(medTags(d), d.name || Lx('รายการนี้','this item'), d.nameEn, null, d.id, openEditorSheet); };
 
-  $('#fName').oninput = () => { sync(); renderSug('#fName', '#fSug'); };
-  $('#fNameEn').oninput = () => { sync(); renderSug('#fNameEn', '#fSugEn'); };
-  bindRelated(d);
+  $('#fName').oninput = () => { sync(); renderSug('#fName', '#fSug', d.type); };
+  const en = $('#fNameEn'); if(en) en.oninput = () => { sync(); renderSug('#fNameEn', '#fSugEn'); };
+  if(!isWater) bindRelated(d);
   const addLib = $('#fAddLib');
   if(addLib) addLib.onclick = () => {
     sync();
     if(!d.name.trim()){ toast(Lx('ใส่ชื่อรายการก่อน','Enter a name first')); return; }
     addCustomDrug(d); openEditorSheet();
   };
-  $$('#fType button').forEach(b => b.onclick = () => { sync(); d.type = b.dataset.v; drawEditor(); });
+  $$('#fType button').forEach(b => b.onclick = () => {
+    sync(); const prev = d.type; d.type = b.dataset.v;
+    if(prev !== d.type) applyTypeDefaults(d, prev);
+    drawEditor();
+  });
   $$('#fIcon button').forEach(b => b.onclick = () => { sync(); d.icon = b.dataset.i; drawEditor(); });
   $$('#fMeal button').forEach(b => b.onclick = () => { sync(); d.meal = b.dataset.v; drawEditor(); });
   $$('#fMode button').forEach(b => b.onclick = () => { sync(); d.freq.mode = b.dataset.v; drawEditor(); });
@@ -2612,6 +2676,7 @@ function drawEditor(){
   const so = $('#fStockOn'); if(so) so.onclick = () => { sync(); d.stockOn = !d.stockOn; drawEditor(); };
   $('#edBody').dataset.sync = '1';
   window.__sync = sync;
+  sync();
 }
 function askTime(cb){
   const host = document.createElement('div');
@@ -2846,10 +2911,7 @@ function fireNoti(title, body){
     }
   }catch(e){}
 }
-function iconURL(){
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%23128A6E"/><text x="32" y="44" font-size="34" text-anchor="middle">💊</text></svg>';
-  return 'data:image/svg+xml,' + svg;
-}
+function iconURL(){ return 'icon-180.png'; }
 function tick(){
   if(!P) return;
   pruneNoti();
@@ -2979,7 +3041,7 @@ async function bioRegister(){
   const salt = crypto.getRandomValues(new Uint8Array(32));
   const cred = await navigator.credentials.create({ publicKey:{
     challenge: ch,
-    rp:{ name:'ตารางยา' },
+    rp:{ name:'iCare' },
     user:{ id: uid8, name: (P.name || 'user') + '@' + P.id, displayName: P.name || 'user' },
     pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
     authenticatorSelection:{ authenticatorAttachment:'platform', userVerification:'required', residentKey:'preferred' },
@@ -3304,7 +3366,7 @@ $('#expBtn').onclick = () => {
   const blob = new Blob([JSON.stringify(snap, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'ตารางยา-สำรอง-' + todayStr() + '.json';
+  a.download = 'iCare-backup-' + todayStr() + '.json';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
   toast('บันทึกไฟล์สำรองแล้ว');
@@ -3857,7 +3919,7 @@ const EN_DOW_S = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 const DICT = {
 /* nav + chrome */
 'วันนี้':'Today','รายการ':'List','ปฏิทิน':'Calendar','ตรวจคู่ยา':'Interactions','ตั้งค่า':'Settings',
-'ตารางยา':'My Meds','ตารางยา — บันทึกยาและอาหารเสริม':'My Meds — medication and supplement tracker',
+'iCare — บันทึกยาและอาหารเสริม':'iCare — medication and supplement tracker',
 'บันทึกยาและอาหารเสริมที่ต้องกินเป็นเวลา':'Track the medicines and supplements you take on a schedule',
 'ตอนนี้':'Now','ปิด':'Close','บันทึก':'Save','ลบ':'Delete','เพิ่ม':'Add','แก้ไข':'Edit','ค้นหา':'Search',
 'ยกเลิก':'Cancel','ตกลง':'OK','เปลี่ยน':'Change','สลับไป':'Switch to','อนุญาต':'Allow','ทั้งหมด':'All',
@@ -4006,7 +4068,8 @@ const DICT = {
 'ยังมีแค่โปรไฟล์เดียวในเครื่องนี้':'Only one profile on this device so far','เพิ่มโปรไฟล์ใหม่':'Add another profile',
 'โปรไฟล์และข้อมูลส่วนตัว':'Profile and personal details','เปิดหน้าโปรไฟล์':'Open my profile',
 'ชื่อ ไอคอน ข้อมูลร่างกาย และการสลับผู้ใช้ ย้ายไปอยู่ที่ปุ่มโปรไฟล์มุมบนซ้ายแล้ว':'Name, icon, body details and profile switching now live behind the profile button in the top left',
-'เข้ารหัสไว้ · ':'Encrypted · ','ชื่อรายการน้ำดื่ม':'Water item name','เช่น น้ำเปล่า 1 แก้ว':'e.g. Water, one glass',
+'เข้ารหัสไว้ · ':'Encrypted · ','ชื่อรายการน้ำดื่ม':'Water item name','ดื่มครั้งละ':'Amount per serving','เช่น ดื่มช้า ๆ ไม่รวดเดียว':'e.g. sip slowly rather than all at once','เวลาที่ต้องดื่ม':'Times to drink',
+'เริ่มวันที่':'Start date','ถึงวันที่ (ถ้ามี)':'End date (optional)','เช่น น้ำเปล่า 1 แก้ว':'e.g. Water, one glass',
 'คำถามกู้รหัส':'Recovery question','ยังไม่ได้ตั้ง':'Not set yet','ตั้งคำถาม':'Set one',
 'เข้ารหัสข้อมูล':'Encrypt your data','ยังไม่ได้เข้ารหัส':'Not encrypted','ปลดล็อกด้วยใบหน้า':'Unlock with your face','ปลดล็อกด้วยใบหน้าหรือลายนิ้วมือ':'Unlock with face or fingerprint',
 'กำลังตรวจสอบอุปกรณ์':'Checking this device','เลือกได้ 4 หรือ 6 หลัก':'Choose 4 or 6 digits',
@@ -4260,7 +4323,7 @@ function firstRun(){
   $('#app').style.display = 'none';
   $('#lock').style.display = 'flex';
   $('#lkAv').textContent = '💊';
-  $('#lkName').textContent = 'ตารางยา';
+  $('#lkName').textContent = 'iCare';
   $('#lkMsg').textContent = 'บันทึกยาและอาหารเสริมที่ต้องกินเป็นเวลา';
   $('#lkDots').innerHTML = '';
   $('#lkKeys').innerHTML = '';
