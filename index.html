@@ -418,10 +418,10 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 <!-- ============ APP ============ -->
 <div id="app">
   <div class="topbar">
-    <button class="iconbtn" id="btnProfile" data-tip="โปรไฟล์และตั้งค่า">
+    <button class="iconbtn" id="btnProfile" data-tip="โปรไฟล์และข้อมูลส่วนตัว">
       <span class="avatar" id="tbAv">🧑</span>
     </button>
-    <div class="who">
+    <div class="who" id="whoTap" style="cursor:pointer">
       <b id="tbName">—</b>
       <span id="tbSub">—</span>
     </div>
@@ -638,10 +638,9 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
     </div>
 
     <div class="card">
-      <h3>โปรไฟล์ผู้ใช้</h3>
-      <p class="h">แต่ละคนมีรายการยาและประวัติแยกกัน</p>
-      <div id="profList"></div>
-      <button class="btn ghost full sm" id="addProf" style="margin-top:12px">เพิ่มโปรไฟล์</button>
+      <h3>โปรไฟล์และข้อมูลส่วนตัว</h3>
+      <p class="h">ชื่อ ไอคอน ข้อมูลร่างกาย และการสลับผู้ใช้ ย้ายไปอยู่ที่ปุ่มโปรไฟล์มุมบนซ้ายแล้ว</p>
+      <button class="btn ghost full sm" id="openProf">เปิดหน้าโปรไฟล์</button>
     </div>
 
     <div class="card">
@@ -2419,8 +2418,13 @@ function drawEditor(){
   const d = draft, f = d.freq;
   const ICONS = ['💊','🩹','🧴','💉','🍬','🫙','🌿','🐟','🥛','🍊','🦴','🧬','❤️','🧠','😴'];
   $('#edBody').innerHTML =
-    '<div class="fld"><label class="fl">ชื่อตัวยาหรืออาหารเสริม</label>'+
-      '<input id="fName" value="' + esc(d.name) + '" autocomplete="off" placeholder="พิมพ์ชื่อสามัญหรือชื่อการค้า เช่น ซาร่า พารา Panadol">'+
+    '<div class="fld"><label class="fl">ประเภท</label>'+
+      '<div class="seg" id="fType"><button data-v="med"' + (d.type==='med'?' class="on"':'') + '>ยา</button>'+
+      '<button data-v="supp"' + (d.type==='supp'?' class="on"':'') + '>อาหารเสริม</button>'+
+      '<button data-v="water"' + (d.type==='water'?' class="on"':'') + '>น้ำดื่ม</button></div></div>'+
+    '<div class="fld"><label class="fl">' + (d.type === 'water' ? 'ชื่อรายการน้ำดื่ม' : 'ชื่อตัวยาหรืออาหารเสริม') + '</label>'+
+      '<input id="fName" value="' + esc(d.name) + '" autocomplete="off" placeholder="' +
+        (d.type === 'water' ? 'เช่น น้ำเปล่า 1 แก้ว' : 'พิมพ์ชื่อสามัญหรือชื่อการค้า เช่น ซาร่า พารา Panadol') + '">'+
       '<div class="tagpick" id="fSug" style="margin-top:8px"></div></div>'+
     '<div class="fld"><label class="fl">ชื่อภาษาอังกฤษ (ช่วยให้ตรวจคู่ยาแม่นขึ้น)</label>'+
       '<input id="fNameEn" value="' + esc(d.nameEn) + '" autocomplete="off" placeholder="Paracetamol">'+
@@ -2431,11 +2435,6 @@ function drawEditor(){
     '<div class="two" style="margin-bottom:14px">'+
       '<button class="btn ghost sm" id="fPick" data-tip="เลือกจากรายชื่อยาและอาหารเสริมที่รวบรวมไว้ ไม่ต้องพิมพ์เอง">เลือกจากรายการยา</button>'+
       '<button class="btn ghost sm" id="fInfo" data-tip="ข้อบ่งใช้ ข้อห้ามใช้ คำเตือน และผลข้างเคียง">ข้อมูลและข้อห้าม</button></div>'+
-    '<div class="fld"><label class="fl">ประเภท</label>'+
-      '<div class="seg" id="fType"><button data-v="med"' + (d.type==='med'?' class="on"':'') + '>ยา</button>'+
-      '<button data-v="supp"' + (d.type==='supp'?' class="on"':'') + '>อาหารเสริม</button>'+
-      '<button data-v="water"' + (d.type==='water'?' class="on"':'') + '>น้ำดื่ม</button></div></div>'+
-
     '<div class="two"><div class="fld"><label class="fl">กินครั้งละ</label>'+
       '<div class="numrow"><input id="fPerDose" type="number" min="0.25" step="0.25" value="' + (d.perDose||1) + '">'+
       '<select id="fUnit">' + FORM_UNITS.map(u => '<option' + (u===(d.unit||'เม็ด')?' selected':'') + '>' + u + '</option>').join('') + '</select></div></div>'+
@@ -3153,12 +3152,7 @@ function renderSettings(){
     : Notification.permission === 'denied' ? 'ถูกปฏิเสธ ต้องเปิดในตั้งค่าเบราว์เซอร์' : 'ยังไม่ได้อนุญาต';
   $('#notiAsk').style.display = ('Notification' in window && Notification.permission === 'default') ? '' : 'none';
 
-  $('#profList').innerHTML = DB.profiles.map(p =>
-    '<div class="row"><span class="avatar">' + p.emoji + '</span>'+
-    '<span class="g"><b>' + esc(p.name) + (p.id === P.id ? ' · กำลังใช้อยู่' : '') + '</b>'+
-    '<span>' + p.meds.length + ' รายการ' + (p.id === P.id ? bodyLine() : '') + '</span></span>'+
-    (p.id === P.id ? '<button class="btn sm ghost" data-ep="' + p.id + '">แก้ไข</button>'
-      : '<button class="btn sm ghost" data-sp="' + p.id + '">สลับไป</button>') + '</div>').join('');
+  const op = $('#openProf'); if(op) op.onclick = profileSheet;
   const lg = $('#legendRow'); if(lg) lg.onclick = legendSheet;
   const cd = $('#cdBtn');
   if(cd){
@@ -3167,8 +3161,6 @@ function renderSettings(){
                        : Lx('เปิดคลังยาส่วนตัว','Open my drug library');
     cd.onclick = customSheet;
   }
-  $$('#profList [data-sp]').forEach(b => b.onclick = () => { DB.active = b.dataset.sp; save(); lockNow(); });
-  $$('#profList [data-ep]').forEach(b => b.onclick = editProfile);
 }
 $$('#langSeg button').forEach(b => b.onclick = () => setLang(b.dataset.v));
 $('#custOn').onclick = () => { P.settings.customOn = P.settings.customOn ? 0 : 1; if(!P.settings.custom) P.settings.custom = $('#custColor').value; save(); applyTheme(); renderSettings(); };
@@ -3189,7 +3181,7 @@ $('#testNoti').onclick = () => {
 };
 $('#btnBell').onclick = notifSheet;
 
-function editProfile(){
+function profileSheet(){
   const B = P.body;
   const draw = () => {
     const a = ageOf(), bmi = bmiOf();
@@ -3207,7 +3199,7 @@ function editProfile(){
         '<span>' + Lx('ใช้ปรับเพดานของคาเฟอีน วิตามินเอ และยาแก้อักเสบ','Adjusts the ceilings for caffeine, vitamin A and anti-inflammatories') + '</span></div>'+
         '<button class="sw' + (B.pregnant ? ' on' : '') + '" id="pPreg"></button></div>' : '')+
       '<div class="fld"><label class="fl">วันเกิด</label>'+
-        '<input type="date" id="pBirth" value="' + esc(B.birth||'') + '">'+
+        dateField('pBirth', B.birth, 'เลือกวันเกิด')+
         (a !== null ? '<p class="src" style="margin-top:6px">อายุ ' + a + ' ปี</p>' : '') + '</div>'+
       '<div class="two"><div class="fld"><label class="fl">น้ำหนัก (กิโลกรัม)</label>'+
         '<input type="number" id="pW" min="1" max="400" step="0.1" placeholder="เช่น 62" value="' + (B.weight==null?'':B.weight) + '"></div>'+
@@ -3224,15 +3216,36 @@ function editProfile(){
       if(g('#pH')) B.height = g('#pH').value === '' ? null : +g('#pH').value;
     };
     ['#pBirth','#pW','#pH'].forEach(x => { const e = $(x); if(e) e.onchange = () => { sync(); draw(); }; });
+    $$('#pBody [data-clr]').forEach(b => b.onclick = e => {
+      e.preventDefault(); e.stopPropagation();
+      sync(); B.birth = null; draw();
+    });
     $$('#pEmo button').forEach(b => b.onclick = () => { sync(); P.emoji = b.dataset.e; draw(); });
     $$('#pSex button').forEach(b => b.onclick = () => { sync(); B.sex = b.dataset.v; if(b.dataset.v !== 'f') B.pregnant = false; draw(); });
     const pg = $('#pPreg'); if(pg) pg.onclick = () => { sync(); B.pregnant = !B.pregnant; draw(); };
     window.__psync = sync;
   };
-  openSheet('<div class="shd"><b>แก้ไขโปรไฟล์</b><button class="btn sm ghost" onclick="closeSheet()">ปิด</button></div>'+
+  const others = DB.profiles.filter(x => x.id !== P.id);
+  openSheet('<div class="shd"><b>โปรไฟล์ของฉัน</b><button class="btn sm ghost" onclick="closeSheet()">ปิด</button></div>'+
     '<div id="pBody"></div>'+
-    '<button class="btn full" id="pSave">บันทึก</button>'+
+    '<button class="btn full" id="pSave">บันทึกข้อมูลส่วนตัว</button>'+
+    '<div class="card" style="box-shadow:none;margin-top:16px"><h3>สลับผู้ใช้</h3>'+
+    '<p class="h">แต่ละคนมีรายการยา ประวัติ และรหัส PIN ของตัวเอง สลับแล้วต้องใส่รหัสของคนนั้น</p>'+
+    (others.length ? others.map(x => '<button class="mrow" data-sw="' + x.id + '" style="align-items:center;width:100%;text-align:left">'+
+      '<span class="avatar">' + x.emoji + '</span>'+
+      '<span class="bd"><span class="nm">' + esc(x.name) + '</span>'+
+      '<span class="tt">' + (x.vault ? 'เข้ารหัสไว้ · ' : '') + (x.meds ? x.meds.length : 0) + ' รายการ</span></span>'+
+      '<span class="sev low" style="flex:none">สลับไป</span></button>').join('')
+      : '<p style="font-size:13px;color:var(--ink-3);margin:0 0 10px">ยังมีแค่โปรไฟล์เดียวในเครื่องนี้</p>')+
+    '<button class="btn ghost full sm" id="pAdd" style="margin-top:10px">เพิ่มโปรไฟล์ใหม่</button></div>'+
     (DB.profiles.length > 1 ? '<button class="btn ghost full sm" id="pDel" style="margin-top:9px;color:var(--danger)">ลบโปรไฟล์นี้</button>' : ''));
+  $$('#sheetBody [data-sw]').forEach(b => b.onclick = () => {
+    if(window.__psync) window.__psync();
+    const n = $('#pName'); if(n && n.value.trim()) P.name = n.value.trim();
+    save();
+    DB.active = b.dataset.sw; save(); closeSheet(); lockNow();
+  });
+  $('#pAdd').onclick = () => { closeSheet(); setTimeout(newProfileFlow, 200); };
   draw();
   $('#pSave').onclick = () => {
     if(window.__psync) window.__psync();
@@ -3250,7 +3263,7 @@ function editProfile(){
     }
   };
 }
-$('#addProf').onclick = () => {
+function newProfileFlow(){
   openSheet('<div class="shd"><b>เพิ่มโปรไฟล์</b><button class="btn sm ghost" onclick="closeSheet()">ปิด</button></div>'+
     '<p style="font-size:13px;color:var(--ink-2);margin:0 0 14px">แต่ละโปรไฟล์มีรายการยา ประวัติ และรหัส PIN ของตัวเอง</p>'+
     '<div class="fld"><label class="fl">ชื่อ</label><input id="npName" placeholder="เช่น คุณแม่"></div>'+
@@ -3262,7 +3275,7 @@ $('#addProf').onclick = () => {
     closeSheet();
     setPinFlow(p, () => { DB.profiles.push(p); DB.active = p.id; save(); lockNow(); });
   };
-};
+}
 $('#bioOn').onclick = async () => {
   if(P.bio){
     if(!confirm(Lx('ปิดการปลดล็อกด้วยใบหน้าใช่หรือไม่ ต่อไปต้องใช้รหัส PIN อย่างเดียว',
@@ -3574,8 +3587,9 @@ function paintTop(){
   $('#tbSub').textContent = ds.length ? (left ? 'เหลืออีก ' + left + ' รายการวันนี้' : 'ครบทุกรายการแล้ววันนี้') : 'ไม่มีรายการวันนี้';
   paintBell();
 }
+$('#whoTap').onclick = profileSheet;
 $('#btnLock').onclick = lockNow;
-$('#btnProfile').onclick = () => { go('set'); };
+$('#btnProfile').onclick = profileSheet;
 
 /* ---- auto lock ---- */
 function resetIdle(){
@@ -3981,12 +3995,18 @@ const DICT = {
 'ตั้งค่าการแจ้งเตือน':'Notification settings','น้ำดื่ม':'Water','น้ำดื่มวันนี้':'Water today',
 'ยังไม่ได้กรอกปริมาณต่อแก้ว':'No volume set per serving',
 'ยาที่ใกล้หมด':'Running low','เติม':'Refill','จำนวนคงเหลือใกล้ถึงจำนวนที่ตั้งเตือนไว้':'The remaining count is near the level you set',
-'อัปเดตจำนวนคงเหลือแล้ว':'Stock updated','รูปแบบวันที่':'Date format','เลือกวันที่':'Pick a date','ยังไม่กำหนด':'Not set',
+'อัปเดตจำนวนคงเหลือแล้ว':'Stock updated','รูปแบบวันที่':'Date format','เลือกวันที่':'Pick a date','เลือกวันเกิด':'Pick a date of birth','ยังไม่กำหนด':'Not set',
 'ชื่อตัวยาหรืออาหารเสริม':'Medicine or supplement name',
 'พิมพ์ชื่อสามัญหรือชื่อการค้า เช่น ซาร่า พารา Panadol':'Type a generic or brand name, e.g. Sara, Panadol',
 'ยังไม่มีชื่อนี้ในคลัง เพิ่มเข้าคลังยาส่วนตัว':'Not in the library yet — add it to my drug library',
 'คลังยาส่วนตัว':'My drug library','ยาที่คุณเพิ่มเองนอกเหนือจากคลังหลัก':'Drugs you added beyond the built-in library',
 'เปิดคลังยาส่วนตัว':'Open my drug library','เพิ่มเอง':'Added by me',
+'โปรไฟล์ของฉัน':'My profile','บันทึกข้อมูลส่วนตัว':'Save my details','สลับผู้ใช้':'Switch profile',
+'แต่ละคนมีรายการยา ประวัติ และรหัส PIN ของตัวเอง สลับแล้วต้องใส่รหัสของคนนั้น':'Each person keeps their own items, history and PIN. Switching asks for their PIN.',
+'ยังมีแค่โปรไฟล์เดียวในเครื่องนี้':'Only one profile on this device so far','เพิ่มโปรไฟล์ใหม่':'Add another profile',
+'โปรไฟล์และข้อมูลส่วนตัว':'Profile and personal details','เปิดหน้าโปรไฟล์':'Open my profile',
+'ชื่อ ไอคอน ข้อมูลร่างกาย และการสลับผู้ใช้ ย้ายไปอยู่ที่ปุ่มโปรไฟล์มุมบนซ้ายแล้ว':'Name, icon, body details and profile switching now live behind the profile button in the top left',
+'เข้ารหัสไว้ · ':'Encrypted · ','ชื่อรายการน้ำดื่ม':'Water item name','เช่น น้ำเปล่า 1 แก้ว':'e.g. Water, one glass',
 'คำถามกู้รหัส':'Recovery question','ยังไม่ได้ตั้ง':'Not set yet','ตั้งคำถาม':'Set one',
 'เข้ารหัสข้อมูล':'Encrypt your data','ยังไม่ได้เข้ารหัส':'Not encrypted','ปลดล็อกด้วยใบหน้า':'Unlock with your face','ปลดล็อกด้วยใบหน้าหรือลายนิ้วมือ':'Unlock with face or fingerprint',
 'กำลังตรวจสอบอุปกรณ์':'Checking this device','เลือกได้ 4 หรือ 6 หลัก':'Choose 4 or 6 digits',
