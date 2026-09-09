@@ -213,7 +213,16 @@ label.fl{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margi
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
 .cal .dow{text-align:center;font-size:11.5px;color:var(--ink-3);padding:5px 0;font-weight:600}
 .cal button{aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;gap:3px;font-size:13.5px;font-variant-numeric:tabular-nums;color:var(--ink)}
+  justify-content:center;gap:2px;font-size:13.5px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.cal .dnum{line-height:1.1}
+.cal .ics{display:flex;align-items:center;justify-content:center;gap:0;font-size:9.5px;line-height:1;
+  max-width:100%;overflow:hidden;padding-bottom:2px;border-bottom:2px solid transparent}
+.cal .ics i{font-style:normal;font-size:8px;color:var(--ink-3);margin-left:1px}
+.cal .ics.full{border-bottom-color:var(--good)}
+.cal .ics.part{border-bottom-color:var(--warn)}
+.cal .ics.miss{border-bottom-color:var(--danger)}
+.cal button.sel .ics{border-bottom-color:rgba(255,255,255,.8)}
+.cal button.sel .ics i{color:rgba(255,255,255,.85)}
 .cal button.pad{opacity:0;pointer-events:none}
 .cal button.sel{background:var(--accent);color:#fff}
 html[data-dark="1"] .cal button.sel{color:#0E1419}
@@ -439,6 +448,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
     </div>
     <div id="tdWarn"></div>
     <div id="tdDose"></div>
+    <div id="tdStock"></div>
     <div class="rail" id="rail"></div>
   </section>
 
@@ -1180,6 +1190,66 @@ function myConflicts(tags, selfId){
   });
   const seen = new Set();
   return out.filter(x => { const k = x.med.id + x.r.t; if(seen.has(k)) return false; seen.add(k); return true; });
+}
+
+/* ---- ยาที่ใกล้หมด ---- */
+function stockStatus(){
+  const out = [];
+  (P.meds || []).forEach(m => {
+    if(!m.active || !m.stockOn || m.stock === null || m.stock === undefined) return;
+    let used = 0;
+    const t = new Date();
+    for(let i=0;i<30;i++){
+      const d = new Date(t); d.setDate(d.getDate()+i);
+      const ds = todayStr(d);
+      if(isDue(m, ds)) used += (m.times || []).length * (+m.perDose || 1);
+    }
+    const perDay = used / 30;
+    const days = perDay > 0 ? Math.floor(m.stock / perDay) : null;
+    const alert = m.stockAlert || 7;
+    if(m.stock <= alert || (days !== null && days <= 7)) out.push({med:m, days:days, perDay:perDay});
+  });
+  out.sort((a,b) => (a.days === null ? 999 : a.days) - (b.days === null ? 999 : b.days));
+  return out;
+}
+function renderStock(){
+  const host = $('#tdStock'); if(!host) return;
+  const low = stockStatus();
+  if(!low.length){ host.innerHTML = ''; return; }
+  const out = low.filter(x => x.med.stock <= 0);
+  host.innerHTML = '<button class="mrow" id="stBar" data-tip="จำนวนคงเหลือใกล้ถึงจำนวนที่ตั้งเตือนไว้" style="margin-bottom:18px;'+
+    'border-color:color-mix(in srgb,var(--danger) 30%,var(--line));background:var(--danger-bg)">'+
+    '<span class="pill" style="background:color-mix(in srgb,var(--danger) 14%,transparent)">📦</span>'+
+    '<span class="bd"><span class="nm" style="color:var(--danger)">' +
+      (out.length ? Lx(out.length + ' รายการหมดแล้ว', out.length + ' items have run out')
+                  : Lx(low.length + ' รายการใกล้หมด', low.length + ' items running low')) + '</span>'+
+    '<span class="tt" style="color:var(--danger);opacity:.85">' +
+      esc(low.slice(0,3).map(x => x.med.name).join(', ')) + Lx(' — แตะเพื่อดูรายละเอียด',' — tap for details') + '</span></span>'+
+    '<svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;stroke:var(--danger);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M9 18l6-6-6-6"/></svg></button>';
+  $('#stBar').onclick = () => {
+    openSheet('<div class="shd"><b>' + Lx('ยาที่ใกล้หมด','Running low') + '</b>'+
+      '<button class="btn sm ghost" onclick="closeSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+      low.map((x,i) => '<div class="mrow" style="align-items:center">'+
+        '<span class="pill">' + (x.med.icon || '💊') + '</span>'+
+        '<span class="bd"><span class="nm">' + esc(x.med.name) + '</span>'+
+        '<span class="tt">' + Lx('เหลือ ','') + x.med.stock + ' ' + esc(x.med.unit || 'เม็ด') + Lx('',' left') +
+        (x.days !== null ? ' · ' + (x.days <= 0 ? Lx('หมดแล้ว','out of stock')
+            : Lx('พอสำหรับอีกราว ' + x.days + ' วัน','about ' + x.days + ' days left')) : '') + '</span></span>'+
+        '<button class="btn sm ghost" data-fill="' + i + '" style="flex:none">' + Lx('เติม','Refill') + '</button></div>').join('')+
+      '<p style="font-size:12.5px;color:var(--ink-3);margin:12px 0 0;line-height:1.6">' +
+      Lx('จำนวนวันคำนวณจากตารางที่ตั้งไว้ในอีก 30 วันข้างหน้า ระบบตัดจำนวนคงเหลือให้อัตโนมัติทุกครั้งที่กดว่ากินแล้ว และคืนให้เมื่อกดยกเลิก',
+         'The estimate uses your schedule for the next 30 days. The count goes down automatically each time you mark a dose taken, and back up if you undo it.') + '</p>');
+    $$('#sheetBody [data-fill]').forEach(b => b.onclick = () => {
+      const m = low[+b.dataset.fill].med;
+      const v = prompt(Lx('เติม ' + m.name + ' แล้วเหลือทั้งหมดกี่' + (m.unit || 'เม็ด'),
+                          'After refilling, how many ' + (m.unit || 'units') + ' of ' + m.name + ' do you have?'), String(m.stock));
+      if(v === null) return;
+      const n = Math.max(0, Math.round(+v));
+      if(isNaN(n)) return;
+      m.stock = n; save(); closeSheet(); renderToday(); renderMeds();
+      toast(Lx('อัปเดตจำนวนคงเหลือแล้ว','Stock updated'));
+    });
+  };
 }
 
 /* ---- บล็อก "ห้ามกินคู่กับ" ---- */
@@ -2020,6 +2090,7 @@ function renderToday(){
   const uniq = conf.filter(c => { const k = [c.a.id,c.b.id,c.r.t].sort().join('|'); if(seen.has(k)) return false; seen.add(k); return true; });
   const nHigh = uniq.filter(c => c.r.sev === 'high').length;
   renderOverdose();
+  renderStock();
   $('#tdWarn').innerHTML = uniq.length ? (
     '<button class="mrow" id="warnBar" style="border-color:color-mix(in srgb,var(--danger) 32%,var(--line));'+
     'background:var(--danger-bg);margin-bottom:18px">'+
@@ -2185,7 +2256,9 @@ function renderMeds(){
       '<span class="pill">' + (m.icon || '💊') + '</span>'+
       '<span class="bd"><span class="nm">' + esc(m.name) + (m.dose ? ' <span style="font-weight:400;color:var(--ink-3);font-size:13px">' + esc(m.dose) + '</span>' : '') + '</span>'+
       '<span class="tt"><em>' + (m.times||[]).join(' · ') + '</em> · ' + freqText(m) +
-      (meal.short ? ' · ' + meal.short : '') + (m.active ? '' : ' · พักไว้') + '</span>'+
+      (meal.short ? ' · ' + meal.short : '') +
+      (m.stockOn && m.stock !== null && m.stock !== undefined ? ' · เหลือ ' + m.stock + ' ' + esc(m.unit || 'เม็ด') : '') +
+      (m.active ? '' : ' · พักไว้') + '</span>'+
       (tg.length ? '<span class="chips">' + sortTags(tg).slice(0,3).map(t => '<span class="chip">' + esc(TAGS[t].th) + '</span>').join('') + '</span>' : '') +
       '</span></button>'+
       '<button class="tick" data-mi="' + m.id + '" data-tip="ข้อบ่งใช้ ข้อห้ามใช้ คำเตือน และผลข้างเคียง" style="flex:none">'+
@@ -2502,6 +2575,7 @@ function dayScore(dstr){
 }
 function renderCal(){
   calCursor = calCursor || new Date();
+  if(!selDate) selDate = todayStr();
   const y = calCursor.getFullYear(), m = calCursor.getMonth();
   const yy = y + (dateStyle() === 'thai' ? 543 : 0);
   $('#calTitle').textContent = LANG === 'en' ? EN_MON[m] + ' ' + yy : TH_MON[m] + ' ' + yy;
@@ -2511,14 +2585,23 @@ function renderCal(){
   for(let i=0;i<first;i++) h += '<button class="pad"></button>';
   for(let d=1; d<=last; d++){
     const ds = y + '-' + pad2(m+1) + '-' + pad2(d);
+    const doses = dosesFor(ds);
+    const seen = new Set(), icons = [];
+    doses.forEach(x => { if(!seen.has(x.med.id)){ seen.add(x.med.id); icons.push(x.med.icon || '💊'); } });
     const sc = ds <= ts ? dayScore(ds) : null;
-    let dot = '';
-    if(sc) dot = '<span class="dot ' + (sc.taken === sc.total ? 'full' : sc.logged ? 'part' : ds === ts ? '' : 'miss') + '"></span>';
-    else if(ds > ts && dosesFor(ds).length) dot = '<span class="dot"></span>';
-    h += '<button data-d="' + ds + '" class="' + (ds === ts ? 'today ' : '') + (ds === selDate ? 'sel' : '') + '">' + d + dot + '</button>';
+    const st = sc ? (sc.taken === sc.total ? 'full' : sc.logged ? 'part' : ds === ts ? '' : 'miss') : '';
+    const ic = icons.length
+      ? '<span class="ics ' + st + '">' + icons.slice(0,3).join('') +
+        (icons.length > 3 ? '<i>+' + (icons.length - 3) + '</i>' : '') + '</span>'
+      : '';
+    h += '<button data-d="' + ds + '" class="' + (ds === ts ? 'today ' : '') + (ds === selDate ? 'sel' : '') + '">' +
+         '<span class="dnum">' + d + '</span>' + ic + '</button>';
   }
   $('#calGrid').innerHTML = h;
-  $$('#calGrid [data-d]').forEach(b => b.onclick = () => { selDate = b.dataset.d; renderCal(); });
+  $$('#calGrid [data-d]').forEach(b => b.onclick = () => {
+    selDate = b.dataset.d; renderCal();
+    const dd = $('#dayDetail'); if(dd) dd.scrollIntoView({behavior:'smooth', block:'nearest'});
+  });
 
   /* สถิติ */
   const mk = days => {
@@ -3718,7 +3801,8 @@ const DICT = {
 'อ้วนระดับ 1':'obesity class 1','อ้วนระดับ 2':'obesity class 2',
 'เกณฑ์สำหรับผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก ไม่ใช้กับเด็ก หญิงตั้งครรภ์ และนักกีฬา':
  'WHO Asian adult cut-offs. Not for children, pregnancy or athletes.',
-'รูปแบบวันที่':'Date format','เลือกวันที่':'Pick a date','ยังไม่กำหนด':'Not set',
+'ยาที่ใกล้หมด':'Running low','เติม':'Refill','จำนวนคงเหลือใกล้ถึงจำนวนที่ตั้งเตือนไว้':'The remaining count is near the level you set',
+'อัปเดตจำนวนคงเหลือแล้ว':'Stock updated','รูปแบบวันที่':'Date format','เลือกวันที่':'Pick a date','ยังไม่กำหนด':'Not set',
 'ชื่อตัวยาหรืออาหารเสริม':'Medicine or supplement name',
 'พิมพ์ชื่อสามัญหรือชื่อการค้า เช่น ซาร่า พารา Panadol':'Type a generic or brand name, e.g. Sara, Panadol',
 'ยังไม่มีชื่อนี้ในคลัง เพิ่มเข้าคลังยาส่วนตัว':'Not in the library yet — add it to my drug library',
@@ -3898,11 +3982,34 @@ function tr(str){
 /* แปลทั้งต้นไม้ DOM */
 const TR_ATTR = ['placeholder','data-tip','title','aria-label'];
 function trNode(node){
-  if(node.nodeType === 3){ const v = tr(node.nodeValue); if(v !== node.nodeValue) node.nodeValue = v; return; }
+  if(node.nodeType === 3){
+    const v = tr(node.nodeValue);
+    if(v !== node.nodeValue){ if(node.__th === undefined) node.__th = node.nodeValue; node.nodeValue = v; }
+    return;
+  }
   if(node.nodeType !== 1) return;
   if(node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return;
-  TR_ATTR.forEach(a => { if(node.hasAttribute && node.hasAttribute(a)){ const v = tr(node.getAttribute(a)); if(v !== node.getAttribute(a)) node.setAttribute(a, v); } });
+  TR_ATTR.forEach(a => {
+    if(node.hasAttribute && node.hasAttribute(a)){
+      const cur = node.getAttribute(a), v = tr(cur);
+      if(v !== cur){
+        node.__thAttr = node.__thAttr || {};
+        if(node.__thAttr[a] === undefined) node.__thAttr[a] = cur;
+        node.setAttribute(a, v);
+      }
+    }
+  });
   for(let c = node.firstChild; c; c = c.nextSibling) trNode(c);
+}
+/* คืนข้อความไทยเดิมทุกจุดที่เคยแปลไว้ ใช้ตอนสลับกลับเป็นไทยโดยไม่ต้องรีโหลด */
+function untrNode(node){
+  if(node.nodeType === 3){ if(node.__th !== undefined){ node.nodeValue = node.__th; delete node.__th; } return; }
+  if(node.nodeType !== 1) return;
+  if(node.__thAttr){
+    Object.keys(node.__thAttr).forEach(a => node.setAttribute(a, node.__thAttr[a]));
+    delete node.__thAttr;
+  }
+  for(let c = node.firstChild; c; c = c.nextSibling) untrNode(c);
 }
 function i18nAll(){ if(LANG === 'th') return; trNode(document.body); }
 let trObserver = null;
@@ -3928,9 +4035,13 @@ function setLang(l){
   LANG = l;
   if(P){ P.settings.lang = l; save(); }
   document.documentElement.lang = l;
-  if(changed && l === 'th'){ location.reload(); return; }
   buildAutoDict();
-  startI18n();
+  if(l === 'th'){
+    if(trObserver){ trObserver.disconnect(); trObserver = null; }
+    untrNode(document.body);
+  } else {
+    startI18n();
+  }
   /* แผ่นที่วาดไปแล้วยังเป็นภาษาเดิม ต้องปิดหรือวาดใหม่ */
   const reopenAlarm = $('#alarm').classList.contains('on');
   closeSheet(); $('#sheetBody').innerHTML = '';
