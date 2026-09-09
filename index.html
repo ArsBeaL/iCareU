@@ -384,6 +384,9 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
   border:0;cursor:pointer}
 .datefield .dclr{position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:2;
   width:26px;height:26px;border-radius:50%;background:var(--line-2);color:var(--ink-2);font-size:16px;line-height:1}
+.chip.wait{background:var(--warn-bg);color:var(--warn);font-weight:650}
+.chip.wait b{font-weight:700;font-variant-numeric:tabular-nums}
+.waitline{margin-top:7px;font-size:12px;color:var(--warn);line-height:1.5}
 .numrow{display:flex;gap:8px}
 .numrow input{flex:1;min-width:0}
 .numrow select{width:auto;flex:none;max-width:52%}
@@ -422,8 +425,9 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
       <b id="tbName">—</b>
       <span id="tbSub">—</span>
     </div>
-    <button class="iconbtn" id="btnBell" data-tip="ตั้งค่าการแจ้งเตือน">
+    <button class="iconbtn" id="btnBell" data-tip="สิ่งที่ต้องทำและคำเตือนทั้งหมด" style="position:relative">
       <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      <span class="badge hide" id="bellBadge"></span>
     </button>
     <button class="iconbtn" id="btnLock" data-tip="ล็อกหน้าจอทันที">
       <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -449,6 +453,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
     <div id="tdWarn"></div>
     <div id="tdDose"></div>
     <div id="tdStock"></div>
+    <div id="tdWater"></div>
     <div class="rail" id="rail"></div>
   </section>
 
@@ -460,6 +465,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
       <button class="on" data-f="all">ทั้งหมด</button>
       <button data-f="med">ยา</button>
       <button data-f="supp">อาหารเสริม</button>
+      <button data-f="water">น้ำดื่ม</button>
       <button data-f="off">พักไว้</button>
     </div>
     <div id="medList"></div>
@@ -783,7 +789,7 @@ Object.assign(TAGS, {
 /* ---- กฎเพิ่มเติม ---- */
 
 /* ---- หน่วยนับ (รูปแบบยา) ---- */
-const FORM_UNITS = ['เม็ด','แคปซูล','ซอฟท์เจล','เม็ดฟู่','ซอง','ช้อนตวง','ช้อนชา','ช้อนโต๊ะ','มิลลิลิตร','หยด','พัฟ','เข็ม','แผ่นแปะ','กัมมี่','ก้อน'];
+const FORM_UNITS = ['เม็ด','แคปซูล','ซอฟท์เจล','เม็ดฟู่','ซอง','ช้อนตวง','ช้อนชา','ช้อนโต๊ะ','มิลลิลิตร','แก้ว','ขวด','หยด','พัฟ','เข็ม','แผ่นแปะ','กัมมี่','ก้อน'];
 
 /* ---- หน่วยปริมาณตัวยา ---- */
 const STRENGTH_UNITS = [
@@ -1190,6 +1196,31 @@ function myConflicts(tags, selfId){
   });
   const seen = new Set();
   return out.filter(x => { const k = x.med.id + x.r.t; if(seen.has(k)) return false; seen.add(k); return true; });
+}
+
+/* ---- สรุปน้ำดื่มของวันนี้ ---- */
+function renderWater(){
+  const host = $('#tdWater'); if(!host) return;
+  const ds = todayStr();
+  const doses = dosesFor(ds).filter(x => x.med.type === 'water');
+  if(!doses.length){ host.innerHTML = ''; return; }
+  const ml = x => {
+    const st = +x.med.strength || 0, per = +x.med.perDose || 1;
+    if(!st) return 0;
+    return x.med.strengthUnit === 'mL' ? st * per : 0;
+  };
+  const total = doses.reduce((n,x) => n + ml(x), 0);
+  const done = doses.filter(x => x.status === 'taken').reduce((n,x) => n + ml(x), 0);
+  const pct = total ? Math.round(done / total * 100) : 0;
+  host.innerHTML = '<div class="card" style="box-shadow:none;background:var(--card-2);margin-bottom:18px">'+
+    '<div style="display:flex;align-items:center;gap:11px;margin-bottom:9px">'+
+      '<span class="pill" style="background:color-mix(in srgb,#2A9DE0 16%,transparent)">💧</span>'+
+      '<span style="flex:1"><b style="font-size:15px">' + Lx('น้ำดื่มวันนี้','Water today') + '</b><br>'+
+      '<span style="font-size:12.5px;color:var(--ink-3)">' +
+        (total ? Lx('ดื่มแล้ว ','') + fmtAmt(done,'mL') + Lx(' จาก ',' of ') + fmtAmt(total,'mL')
+               : Lx('ยังไม่ได้กรอกปริมาณต่อแก้ว','No volume set per serving')) + '</span></span>'+
+      '<b class="num" style="font-size:17px;color:#2A9DE0">' + pct + '%</b></div>'+
+    '<div class="bar"><i style="width:' + Math.min(100,pct) + '%;background:#2A9DE0"></i></div></div>';
 }
 
 /* ---- ยาที่ใกล้หมด ---- */
@@ -1667,7 +1698,7 @@ function pickDrug(x){
   if(x.unit) d.unit = x.unit;
   if(x.st) d.strength = x.st;
   if(x.su) d.strengthUnit = x.su;
-  d.type = x.kind === 'supp' ? 'supp' : 'med';
+  d.type = (x.kind === 'supp' || x.kind === 'water') ? x.kind : 'med';
   openEditorSheet();
 }
 /* แถบชื่อสามัญ ยี่ห้ออื่น และขนาดที่มีขาย */
@@ -1956,12 +1987,22 @@ function toast(msg){
   const el = $('#toast'); el.textContent = msg; el.classList.add('on');
   clearTimeout(toastT); toastT = setTimeout(()=>el.classList.remove('on'), 2600);
 }
-function openSheet(html){
+let curBack = null;
+function openSheet(html, back){
+  curBack = back || null;
   $('#sheetBody').innerHTML = '<div class="grab"></div>' + html;
   $('#sheet').classList.add('on');
+  $('#sheetBody').scrollTop = 0;
 }
-function closeSheet(){ $('#sheet').classList.remove('on'); }
-$('#sheet').addEventListener('click', e => { if(e.target.id === 'sheet') closeSheet(); });
+function closeSheet(){ curBack = null; $('#sheet').classList.remove('on'); }
+/* ปิดแผ่นที่ซ้อนอยู่ แล้วกลับไปแผ่นเดิมถ้ามี */
+function dismissSheet(){
+  const b = curBack; curBack = null;
+  $('#sheet').classList.remove('on');
+  if(b) setTimeout(b, 180);
+}
+window.dismissSheet = dismissSheet;
+$('#sheet').addEventListener('click', e => { if(e.target.id === 'sheet') dismissSheet(); });
 
 function beep(){
   if(!P || !P.settings.sound) return;
@@ -2069,6 +2110,45 @@ function dayConflicts(doses){
   }
   return out;
 }
+/* หาเวลาที่เร็วที่สุดที่กินรายการนี้ได้ โดยดูจากรายการที่กินไปแล้ววันนี้และต้องเว้นระยะกัน */
+function spacingWait(med, dstr){
+  let best = null;
+  const mt = medTags(med);
+  Object.keys(P.logs).forEach(k => {
+    const parts = k.split('|');
+    if(parts[0] !== dstr) return;
+    const l = P.logs[k];
+    if(!l || l.s !== 'taken' || !l.at) return;
+    const other = (P.meds || []).find(x => x.id === parts[1]);
+    if(!other || other.id === med.id) return;
+    let gap = 0, why = null;
+    pairIssues(mt, medTags(other)).forEach(r => {
+      if(r.sev === 'good' || r.k || !r.gap) return;
+      if(r.gap > gap){ gap = r.gap; why = r; }
+    });
+    if(manualConflict(med, other) && gap < 120){
+      gap = 120;
+      why = {sev:'high', gap:120, t:'คุณตั้งไว้ว่าห้ามกินคู่กัน', te:'You marked these as never together',
+             x:'แยกกินคนละช่วง', xe:'Take them at separate times.'};
+    }
+    if(!gap) return;
+    const until = l.at + gap * 60000;
+    if(until > Date.now() && (!best || until > best.until)) best = {until:until, gap:gap, r:why, other:other};
+  });
+  return best;
+}
+function fmtCountdown(ms){
+  if(ms <= 0) return null;
+  const t = Math.ceil(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+  return (h ? h + ':' : '') + pad2(m) + ':' + pad2(sec);
+}
+function updateCountdowns(){
+  $$('[data-until]').forEach(el => {
+    const txt = fmtCountdown(+el.dataset.until - Date.now());
+    el.textContent = txt || Lx('กินได้แล้ว','ready now');
+    if(!txt) el.removeAttribute('data-until');
+  });
+}
 function leadOf(m){ return (m.lead === null || m.lead === undefined) ? P.settings.lead : m.lead; }
 
 /* ================= หน้าวันนี้ ================= */
@@ -2091,6 +2171,7 @@ function renderToday(){
   const nHigh = uniq.filter(c => c.r.sev === 'high').length;
   renderOverdose();
   renderStock();
+  renderWater();
   $('#tdWarn').innerHTML = uniq.length ? (
     '<button class="mrow" id="warnBar" style="border-color:color-mix(in srgb,var(--danger) 32%,var(--line));'+
     'background:var(--danger-bg);margin-bottom:18px">'+
@@ -2154,12 +2235,17 @@ function renderToday(){
         chips.push('<span class="chip stock">เหลือ ' + m.stock + ' ' + esc(m.unit || 'เม็ด') + '</span>');
       const myConf = conf.filter(c => (c.a.id === m.id || c.b.id === m.id) && c.at === t);
       if(myConf.length) chips.push('<span class="chip warn">ระวังคู่ยา</span>');
+      const wait = d.status ? null : spacingWait(m, ds);
+      if(wait) chips.push('<span class="chip wait">' + Lx('รออีก ','wait ') +
+        '<b class="num" data-until="' + wait.until + '">' + fmtCountdown(wait.until - Date.now()) + '</b></span>');
 
       html += '<div class="dose' + (d.status === 'taken' ? ' taken' : '') + '">'+
         '<button class="pill" data-info="' + m.id + '" data-tip="แตะเพื่อดูข้อบ่งใช้ ข้อห้ามใช้ และผลข้างเคียง">' + (m.icon || '💊') + '</button>'+
         '<div class="bd"><div class="nm">' + esc(m.name) + '</div>'+
         (m.note ? '<div class="sub">' + esc(m.note) + '</div>' : '') +
-        (chips.length ? '<div class="chips">' + chips.join('') + '</div>' : '') + '</div>'+
+        (chips.length ? '<div class="chips">' + chips.join('') + '</div>' : '') +
+        (wait ? '<div class="waitline">' + Lx('เพิ่งกิน ','Just took ') + esc(wait.other.name) +
+          Lx(' ต้องเว้นห่าง ',' — space them ') + fmtGap(wait.gap) + Lx('',' apart') + '</div>' : '') + '</div>'+
         '<div class="act">'+
           '<button class="tick' + (d.status === 'taken' ? ' on' : '') + '" data-take="' + d.key + '" data-tip="กดเมื่อกินแล้ว กดซ้ำเพื่อยกเลิก">'+
             '<svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 7"/></svg></button>'+
@@ -2186,6 +2272,7 @@ function renderToday(){
   if(!markPlaced) html += '<div class="nowmark"><span class="num">' + pad2(now.getHours()) + ':' + pad2(now.getMinutes()) + '</span><i></i><span>ตอนนี้</span></div>';
 
   rail.innerHTML = html;
+  updateCountdowns();
   $$('#rail [data-info]').forEach(b => b.onclick = () => {
     const m = P.meds.find(x => x.id === b.dataset.info);
     if(m) infoSheet(medTags(m), m.name, m.nameEn, null, m.id);
@@ -2280,7 +2367,7 @@ function medEditor(med){
     times:['08:00'], freq:{mode:'daily', days:[0,1,2,3,4,5,6], mdays:[1], every:2},
     meal:'none', mealGap:30, lead:null, tags:[], tagsOff:[], avoid:[],
     start:todayStr(), end:'', active:true,
-    stockOn:false, stock:30, perDoseCount:1, stockAlert:7
+    stockOn:false, stock:30, perDoseCount:1, stockAlert:7, gen:null
   };
   draftIsNew = !med;
   openEditorSheet();
@@ -2346,7 +2433,8 @@ function drawEditor(){
       '<button class="btn ghost sm" id="fInfo" data-tip="ข้อบ่งใช้ ข้อห้ามใช้ คำเตือน และผลข้างเคียง">ข้อมูลและข้อห้าม</button></div>'+
     '<div class="fld"><label class="fl">ประเภท</label>'+
       '<div class="seg" id="fType"><button data-v="med"' + (d.type==='med'?' class="on"':'') + '>ยา</button>'+
-      '<button data-v="supp"' + (d.type==='supp'?' class="on"':'') + '>อาหารเสริม</button></div></div>'+
+      '<button data-v="supp"' + (d.type==='supp'?' class="on"':'') + '>อาหารเสริม</button>'+
+      '<button data-v="water"' + (d.type==='water'?' class="on"':'') + '>น้ำดื่ม</button></div></div>'+
 
     '<div class="two"><div class="fld"><label class="fl">กินครั้งละ</label>'+
       '<div class="numrow"><input id="fPerDose" type="number" min="0.25" step="0.25" value="' + (d.perDose||1) + '">'+
@@ -2467,9 +2555,9 @@ function drawEditor(){
       d.unit = it[3]; if(it[4]) d.strength = it[4]; d.strengthUnit = it[5];
       openEditorSheet();
       toast('เลือก ' + it[0] + ' แล้ว ปรับขนาดและเวลาได้ตามที่แพทย์สั่ง');
-    });
+    }, openEditorSheet);
   };
-  $('#fInfo').onclick = () => { sync(); infoSheet(medTags(d), d.name || Lx('รายการนี้','this item'), d.nameEn, null, d.id); };
+  $('#fInfo').onclick = () => { sync(); infoSheet(medTags(d), d.name || Lx('รายการนี้','this item'), d.nameEn, null, d.id, openEditorSheet); };
 
   $('#fName').oninput = () => { sync(); renderSug('#fName', '#fSug'); };
   $('#fNameEn').oninput = () => { sync(); renderSug('#fNameEn', '#fSugEn'); };
@@ -2529,8 +2617,9 @@ function drawEditor(){
 function askTime(cb){
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(12,18,24,.55);display:grid;place-items:center;padding:20px';
-  host.innerHTML = '<div style="background:var(--card);border-radius:18px;padding:18px;width:100%;max-width:300px">'+
-    '<label class="fl">เลือกเวลา</label><input type="time" id="tPick" value="08:00" style="font-size:18px;text-align:center">'+
+  host.innerHTML = '<div style="background:var(--card);border-radius:18px;padding:18px;width:min(320px,calc(100vw - 44px));max-width:100%;overflow:hidden;box-sizing:border-box">'+
+    '<label class="fl">เลือกเวลา</label>'+
+    '<input type="time" id="tPick" value="08:00" style="font-size:19px;text-align:center;width:100%;min-width:0;max-width:100%;box-sizing:border-box">'+
     '<div style="display:flex;gap:8px;margin-top:14px">'+
     '<button class="btn ghost sm" id="tNo" style="flex:1">ยกเลิก</button>'+
     '<button class="btn sm" id="tOk" style="flex:1">เพิ่ม</button></div></div>';
@@ -2802,6 +2891,7 @@ function tick(){
     showAlarm();
   }
   if(VIEW === 'today') renderToday();
+  paintBell();
 }
 let alarmCur = null;
 function showAlarm(){
@@ -2841,6 +2931,16 @@ function showAlarm(){
     '<div class="two" style="margin-top:9px">'+
       '<button class="btn ghost sm" id="alSnooze">เลื่อน 10 นาที</button>'+
       '<button class="btn ghost sm" id="alSkip">ข้ามมื้อนี้</button></div>';
+  const wt = spacingWait(m, todayStr());
+  if(wt){
+    const el = document.createElement('div');
+    el.className = 'link';
+    el.innerHTML = '<b>' + Lx('เพิ่งกิน ','Just took ') + esc(wt.other.name) + Lx(' ไป',' ') + '</b><br>' +
+      Lx('ต้องเว้นห่างอีก ','Wait another ') + '<b class="num" data-until="' + wt.until + '">' +
+      fmtCountdown(wt.until - Date.now()) + '</b>' + Lx(' ก่อนกินรายการนี้',' before taking this one');
+    $('#alarmBody').insertBefore(el, $('#alTake'));
+    updateCountdowns();
+  }
   $('#alarm').classList.add('on');
   beep();
   fireNoti(head + ' · ' + d.time, m.name + (m.dose ? ' ' + m.dose : '') +
@@ -3087,7 +3187,7 @@ $('#testNoti').onclick = () => {
   fireNoti('ทดสอบการเตือน', 'ถ้าเห็นข้อความนี้ แปลว่าการเตือนใช้งานได้');
   toast('ส่งการเตือนทดสอบแล้ว');
 };
-$('#btnBell').onclick = () => { go('set'); setTimeout(() => $('#notiState').closest('.card').scrollIntoView({behavior:'smooth'}), 60); };
+$('#btnBell').onclick = notifSheet;
 
 function editProfile(){
   const B = P.body;
@@ -3385,6 +3485,7 @@ function showApp(){
   calCursor = new Date(); selDate = null; renderCal();
   if(notiTick) clearInterval(notiTick);
   notiTick = setInterval(tick, 15000);
+  if(!window.__cdTick) window.__cdTick = setInterval(updateCountdowns, 1000);
   tick();
   resetIdle();
   if('Notification' in window && Notification.permission === 'default'){
@@ -3394,12 +3495,84 @@ function showApp(){
     }, 1800);
   }
 }
+/* รวมทุกอย่างที่ต้องรู้ในที่เดียว */
+function notifItems(){
+  const ds = todayStr(), now = new Date(), nowMin = now.getHours()*60 + now.getMinutes();
+  const doses = dosesFor(ds);
+  const pending = doses.filter(d => !d.status);
+  const late = pending.filter(d => toMin(d.time) < nowMin - 20);
+  const soon = pending.filter(d => toMin(d.time) >= nowMin - 20);
+  const seen = new Set();
+  const conf = dayConflicts(doses).filter(c => {
+    const k = [c.a.id, c.b.id, c.r.t].sort().join('|');
+    if(seen.has(k)) return false; seen.add(k); return true;
+  });
+  return { ds:ds, doses:doses, pending:pending, late:late, soon:soon,
+           conf:conf, low:stockStatus(), over:dailyIntake(ds).filter(x => x.pct > 100) };
+}
+function paintBell(){
+  const el = $('#bellBadge'); if(!el) return;
+  const n = notifItems();
+  const c = n.late.length + n.low.length + n.conf.length + n.over.length;
+  el.textContent = c > 99 ? '99+' : c;
+  el.classList.toggle('hide', c === 0);
+}
+function notifSheet(){
+  const n = notifItems();
+  const row = (icon, title, sub, attr) =>
+    '<div class="mrow" style="align-items:center"' + (attr || '') + '>'+
+    '<span class="pill">' + icon + '</span>'+
+    '<span class="bd"><span class="nm">' + title + '</span>'+
+    (sub ? '<span class="tt">' + sub + '</span>' : '') + '</span></div>';
+  const sec = (t, body) => body ? '<h3 style="margin:16px 0 8px">' + t + '</h3>' + body : '';
+
+  const doseRow = d => {
+    const wait = spacingWait(d.med, n.ds);
+    return '<div class="mrow" style="align-items:center">'+
+      '<span class="pill">' + (d.med.icon || '💊') + '</span>'+
+      '<span class="bd"><span class="nm">' + esc(d.med.name) + '</span>'+
+      '<span class="tt"><em>' + d.time + '</em>' +
+        (MEAL[d.med.meal || 'none'].short ? ' · ' + MEAL[d.med.meal || 'none'].short : '') +
+        (wait ? ' · <span style="color:var(--warn)">' + Lx('รออีก ','wait ') +
+          '<b class="num" data-until="' + wait.until + '">' + fmtCountdown(wait.until - Date.now()) + '</b></span>' : '') +
+      '</span></span>'+
+      '<button class="btn sm ghost" data-take="' + d.key + '" style="flex:none">' + Lx('กินแล้ว','Taken') + '</button></div>';
+  };
+
+  openSheet('<div class="shd"><b>' + Lx('การแจ้งเตือน','Notifications') + '</b>'+
+    '<button class="btn sm ghost" onclick="closeSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    (n.late.length + n.soon.length + n.low.length + n.conf.length + n.over.length === 0
+      ? '<div class="empty"><div class="big">✅</div><p>' + Lx('ตอนนี้ไม่มีอะไรค้างอยู่','Nothing needs you right now') + '</p></div>' : '')+
+    sec(Lx('เลยเวลามาแล้ว','Overdue'), n.late.map(doseRow).join(''))+
+    sec(Lx('ที่เหลือของวันนี้','Still due today'), n.soon.map(doseRow).join(''))+
+    sec(Lx('ยาที่ใกล้หมด','Running low'), n.low.map(x =>
+      row(x.med.icon || '💊', esc(x.med.name),
+          Lx('เหลือ ','') + x.med.stock + ' ' + esc(x.med.unit || 'เม็ด') + Lx('',' left') +
+          (x.days !== null ? ' · ' + (x.days <= 0 ? Lx('หมดแล้ว','out of stock')
+            : Lx('พออีกราว ' + x.days + ' วัน','about ' + x.days + ' days left')) : ''))).join(''))+
+    sec(Lx('คู่ที่ต้องระวังวันนี้','Pairs to watch today'), n.conf.map((c,i) =>
+      '<button class="mrow" data-conf="' + i + '" style="align-items:center;width:100%;text-align:left">'+
+      '<span class="pill">⚠️</span><span class="bd"><span class="nm">' + esc(c.a.name) + ' + ' + esc(c.b.name) + '</span>'+
+      '<span class="tt">' + esc(RT(c.r,'t')) + '</span></span></button>').join(''))+
+    sec(Lx('ได้รับเกินขนาดต่อวัน','Over the daily limit'), n.over.map(x =>
+      row('📊', esc(Lx(TAGS[x.tag] ? TAGS[x.tag].th : x.tag, TAGS[x.tag] ? TAGS[x.tag].en : x.tag)),
+          fmtAmt(x.total, x.unit) + Lx(' จากขีดสูงสุด ',' of a maximum of ') + fmtAmt(x.max, x.unit) +
+          ' · ' + x.pct + '%')).join(''))+
+    '<button class="btn ghost full sm" id="nfSet" style="margin-top:18px">' +
+      Lx('ตั้งค่าการแจ้งเตือน','Notification settings') + '</button>');
+
+  updateCountdowns();
+  $$('#sheetBody [data-take]').forEach(b => b.onclick = () => { setLog(b.dataset.take, 'taken'); notifSheet(); paintBell(); });
+  $$('#sheetBody [data-conf]').forEach(b => b.onclick = () => { closeSheet(); setTimeout(() => showConflict(n.conf[+b.dataset.conf]), 200); });
+  $('#nfSet').onclick = () => { closeSheet(); go('set'); setTimeout(() => { const c = $('#notiState'); if(c) c.closest('.card').scrollIntoView({behavior:'smooth'}); }, 200); };
+}
 function paintTop(){
   $('#tbAv').textContent = P.emoji;
   $('#tbName').textContent = P.name;
   const ds = dosesFor(todayStr());
   const left = ds.filter(d => !d.status).length;
   $('#tbSub').textContent = ds.length ? (left ? 'เหลืออีก ' + left + ' รายการวันนี้' : 'ครบทุกรายการแล้ววันนี้') : 'ไม่มีรายการวันนี้';
+  paintBell();
 }
 $('#btnLock').onclick = lockNow;
 $('#btnProfile').onclick = () => { go('set'); };
@@ -3504,7 +3677,7 @@ function legendSheet(){
 
 /* ================= เลือกยาจากหมวด ================= */
 let catG = 'med', catC = 0, catQ = '';
-function catalogPicker(onPick){
+function catalogPicker(onPick, back){
   catQ = '';
   const draw = () => {
     const groups = CATALOG.filter(x => x.g === catG);
@@ -3522,7 +3695,8 @@ function catalogPicker(onPick){
     $('#catBody').innerHTML =
       '<div class="seg" style="margin-bottom:12px" id="catG">'+
         '<button data-g="med"' + (catG==='med'?' class="on"':'') + '>ยา</button>'+
-        '<button data-g="supp"' + (catG==='supp'?' class="on"':'') + '>อาหารเสริม</button></div>'+
+        '<button data-g="supp"' + (catG==='supp'?' class="on"':'') + '>อาหารเสริม</button>'+
+        '<button data-g="water"' + (catG==='water'?' class="on"':'') + '>น้ำดื่ม</button></div>'+
       '<input id="catQ" placeholder="ค้นหาชื่อไทยหรืออังกฤษ" value="' + esc(catQ) + '" autocomplete="off" style="margin-bottom:12px">'+
       (catQ.trim() ? '' : '<div class="tagpick" id="catCats" style="margin-bottom:14px">' +
         groups.map((g,i) => '<button data-c="' + i + '"' + (i===Math.min(catC,groups.length-1)?' class="on"':'') + '>' + g.ic + ' ' + esc(g.c) + '</button>').join('') + '</div>')+
@@ -3545,20 +3719,20 @@ function catalogPicker(onPick){
     qi.oninput = () => { catQ = qi.value; const pos = qi.selectionStart; draw(); const n = $('#catQ'); n.focus(); n.setSelectionRange(pos, pos); };
     const open = i => {
       const x = items[i];
-      infoSheet(x.it[2], x.it[0], x.it[1], () => onPick(x));
+      infoSheet(x.it[2], x.it[0], x.it[1], () => onPick(x), null, () => catalogPicker(onPick, back));
     };
     $$('#catBody [data-p]').forEach(b => b.onclick = () => open(+b.dataset.p));
     $$('#catBody [data-i]').forEach(b => b.onclick = () => open(+b.dataset.i));
   };
-  openSheet('<div class="shd"><b>เลือกจากรายการยา</b><button class="btn sm ghost" onclick="closeSheet()">ปิด</button></div>'+
+  openSheet('<div class="shd"><b>เลือกจากรายการยา</b><button class="btn sm ghost" onclick="dismissSheet()">ปิด</button></div>'+
     '<p style="font-size:12.5px;color:var(--ink-3);margin:-8px 0 14px;line-height:1.55">'+
     'รายชื่ออ้างอิงจากบัญชียาหลักแห่งชาติของสำนักงานคณะกรรมการอาหารและยา, WHO Model List of Essential Medicines '+
-    'และเอกสารข้อเท็จจริงของ NIH Office of Dietary Supplements</p><div id="catBody"></div>');
+    'และเอกสารข้อเท็จจริงของ NIH Office of Dietary Supplements</p><div id="catBody"></div>', back);
   draw();
 }
 
 /* ================= ข้อมูลยา ข้อห้าม ผลข้างเคียง ================= */
-function infoSheet(tags, title, titleEn, onUse, selfId){
+function infoSheet(tags, title, titleEn, onUse, selfId, back){
   const keys = (tags || []).filter(t => INFO[t]);
   const seen = new Set(), blocks = [];
   keys.forEach(k => { if(seen.has(INFO[k].src + INFO[k].u)) return; seen.add(INFO[k].src + INFO[k].u); blocks.push({k:k, d:INFO[k]}); });
@@ -3589,10 +3763,10 @@ function infoSheet(tags, title, titleEn, onUse, selfId){
       '<div id="ifOut" style="margin-top:12px"></div></div>'+
     '<p style="font-size:12.5px;color:var(--ink-3);margin:0;line-height:1.6">'+
     'ข้อมูลนี้เป็นการสรุปเพื่อเตือนความจำ ไม่ครอบคลุมทุกกรณีและไม่แทนเอกสารกำกับยาหรือคำสั่งแพทย์ '+
-    'ยาชนิดเดียวกันคนละยี่ห้ออาจมีข้อควรระวังต่างกัน ให้อ่านฉลากที่ได้รับมาเสมอ</p>');
+    'ยาชนิดเดียวกันคนละยี่ห้ออาจมีข้อควรระวังต่างกัน ให้อ่านฉลากที่ได้รับมาเสมอ</p>', back);
 
   $('#ifGo').onclick = () => fdaLookup($('#ifQ').value.trim(), $('#ifOut'));
-  const use = $('#ifUse'); if(use) use.onclick = () => { closeSheet(); setTimeout(onUse, 220); };
+  const use = $('#ifUse'); if(use) use.onclick = () => { closeSheet(); setTimeout(onUse, 200); };
 }
 async function fdaLookup(q, out){
   if(!q){ out.innerHTML = '<p style="font-size:13px;color:var(--ink-2)">ใส่ชื่อสามัญภาษาอังกฤษก่อน</p>'; return; }
@@ -3801,6 +3975,11 @@ const DICT = {
 'อ้วนระดับ 1':'obesity class 1','อ้วนระดับ 2':'obesity class 2',
 'เกณฑ์สำหรับผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก ไม่ใช้กับเด็ก หญิงตั้งครรภ์ และนักกีฬา':
  'WHO Asian adult cut-offs. Not for children, pregnancy or athletes.',
+'การแจ้งเตือน':'Notifications','สิ่งที่ต้องทำและคำเตือนทั้งหมด':'Everything that needs you, in one place',
+'ตอนนี้ไม่มีอะไรค้างอยู่':'Nothing needs you right now','เลยเวลามาแล้ว':'Overdue','ที่เหลือของวันนี้':'Still due today',
+'คู่ที่ต้องระวังวันนี้':'Pairs to watch today','ได้รับเกินขนาดต่อวัน':'Over the daily limit',
+'ตั้งค่าการแจ้งเตือน':'Notification settings','น้ำดื่ม':'Water','น้ำดื่มวันนี้':'Water today',
+'ยังไม่ได้กรอกปริมาณต่อแก้ว':'No volume set per serving',
 'ยาที่ใกล้หมด':'Running low','เติม':'Refill','จำนวนคงเหลือใกล้ถึงจำนวนที่ตั้งเตือนไว้':'The remaining count is near the level you set',
 'อัปเดตจำนวนคงเหลือแล้ว':'Stock updated','รูปแบบวันที่':'Date format','เลือกวันที่':'Pick a date','ยังไม่กำหนด':'Not set',
 'ชื่อตัวยาหรืออาหารเสริม':'Medicine or supplement name',
@@ -3873,7 +4052,7 @@ const DICT = {
 
 /* หน่วยและคำสั้น ๆ */
 const UNIT_EN = {'เม็ด':'tablet','แคปซูล':'capsule','ซอฟท์เจล':'softgel','เม็ดฟู่':'effervescent tablet','ซอง':'sachet',
- 'ช้อนตวง':'scoop','ช้อนชา':'teaspoon','ช้อนโต๊ะ':'tablespoon','มิลลิลิตร':'mL','หยด':'drops','พัฟ':'puff',
+ 'ช้อนตวง':'scoop','ช้อนชา':'teaspoon','ช้อนโต๊ะ':'tablespoon','มิลลิลิตร':'mL','แก้ว':'glass','ขวด':'bottle','หยด':'drops','พัฟ':'puff',
  'เข็ม':'injection','แผ่นแปะ':'patch','กัมมี่':'gummy','ก้อน':'piece',
  'มก.':'mg','มคก.':'mcg','ก.':'g','มล.':'mL','พันล้าน CFU':'billion CFU',
  'มก. (มิลลิกรัม)':'mg (milligram)','มคก. (ไมโครกรัม)':'mcg (microgram)','ก. (กรัม)':'g (gram)',
