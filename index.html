@@ -170,6 +170,8 @@ html[data-dark="1"] .chip.meal{color:var(--accent)}
 .nowmark i{flex:1;height:1.5px;background:color-mix(in srgb,var(--accent) 35%,transparent);border-radius:2px}
 
 .empty{text-align:center;padding:48px 20px;color:var(--ink-3)}
+.sheet .empty{padding:26px 20px}
+#alarm .sheet{min-height:0}
 .empty .big{font-size:40px;margin-bottom:10px;opacity:.5}
 .empty p{margin:0 0 16px;font-size:14px}
 
@@ -304,7 +306,7 @@ html[data-dark="1"] .tagpick button.on{color:#0E1419}
 .mask{position:fixed;inset:0;z-index:110;background:rgba(12,18,24,.5);backdrop-filter:blur(3px);
   display:none;align-items:flex-end;justify-content:center}
 .mask.on{display:flex}
-.sheet{background:var(--paper);width:100%;max-width:660px;max-height:92vh;overflow-y:auto;
+.sheet{background:var(--paper);width:100%;max-width:660px;max-height:92vh;min-height:min(58vh,92vh);overflow-y:auto;
   border-radius:22px 22px 0 0;padding:8px 16px calc(24px + env(safe-area-inset-bottom));
   animation:up .24s cubic-bezier(.2,.8,.3,1)}
 @keyframes up{from{transform:translateY(22px);opacity:.6}to{transform:none;opacity:1}}
@@ -347,6 +349,15 @@ html[data-dark="1"] .mdays button.on{color:#0E1419}
   bottom:calc(env(safe-area-inset-bottom) + 72px);transition:bottom .2s}
 .credit.low{bottom:calc(env(safe-area-inset-bottom) + 14px)}
 @media (min-width:700px){.credit{left:calc(50% - 330px + 16px)}}
+.updbar{position:fixed;left:12px;right:12px;z-index:150;
+  bottom:calc(env(safe-area-inset-bottom) + 74px);max-width:636px;margin:0 auto;
+  background:var(--ink);color:var(--paper);border-radius:14px;padding:11px 12px 11px 15px;
+  display:flex;align-items:center;gap:9px;font-size:13.5px;line-height:1.4;
+  box-shadow:0 10px 28px -10px rgba(0,0,0,.55);animation:up .24s cubic-bezier(.2,.8,.3,1)}
+.updbar span{flex:1;min-width:0}
+.updbar button{background:var(--paper);color:var(--ink);border-radius:9px;
+  padding:7px 12px;font-size:13px;font-weight:660;flex:none}
+.updbar button.x{background:transparent;color:var(--paper);opacity:.7;padding:7px 4px;font-weight:500}
 .hide{display:none!important}
 
 /* tooltip */
@@ -706,6 +717,10 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
       <div class="row">
         <div class="g"><b>สำรองข้อมูลล่าสุด</b><span id="lastBackup">ยังไม่เคยสำรอง</span></div>
       </div>
+      <div class="row">
+        <div class="g"><b>เวอร์ชันของแอป</b><span id="appVer">—</span></div>
+        <button class="btn sm ghost" id="verCheck">ตรวจอัปเดต</button>
+      </div>
       <button class="btn dgr full sm" id="wipeBtn" style="margin-top:10px">ลบข้อมูลทั้งหมดในเครื่องนี้</button>
     </div>
 
@@ -735,6 +750,11 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 <!-- sheets -->
 <div class="mask" id="sheet"><div class="sheet" id="sheetBody"></div></div>
 <div class="mask mid" id="alarm"><div class="sheet" id="alarmBody"></div></div>
+<div class="updbar hide" id="updBar">
+  <span id="updTxt">มีเวอร์ชันใหม่พร้อมใช้งาน</span>
+  <button id="updGo">อัปเดตเลย</button>
+  <button id="updLater" class="x">ภายหลัง</button>
+</div>
 <div class="toast" id="toast"></div>
 <div class="credit" id="credit">design by Ars BeaL</div>
 
@@ -1005,6 +1025,8 @@ Object.assign(TAGS, {
     kw:['cotrimoxazole','co-trimoxazole','bactrim','sulfamethoxazole','trimethoprim','แบคทริม','โคไตรม็อก']},
   metronidazole:{th:'เมโทรนิดาโซล (ฟลาจิล)', en:'Metronidazole',
     kw:['metronidazole','flagyl','เมโทรนิดาโซล','ฟลาจิล','tinidazole']},
+  ccb:{th:'ยากลุ่มแคลเซียมแชนแนลบล็อกเกอร์', en:'Calcium channel blockers',
+    kw:['amlodipine','felodipine','nifedipine','diltiazem','verapamil','แอมโลดิพีน','นอร์วาสค์','norvasc']},
   betablocker:{th:'ยากลุ่มเบต้าบล็อกเกอร์', en:'Beta blockers',
     kw:['atenolol','metoprolol','propranolol','bisoprolol','carvedilol','อะทีโนลอล','โพรพราโนลอล','เบต้าบล็อก']},
   bronchodilator:{th:'ยาขยายหลอดลม', en:'Bronchodilators',
@@ -1902,13 +1924,20 @@ function conditionChecks(){
       const hits = active.filter(m => a.tags.some(t => medTags(m).includes(t)));
       if(hits.length) out.push({ kind:'avoid', cond:c, rule:a, meds:hits, sev:a.sev || 'mod' });
     });
-    (c.meds || []).forEach(g => {
-      if(!g.tags || !g.tags.length) return;
-      const has = active.some(m => g.tags.some(t => medTags(m).includes(t)));
-      if(!has) out.push({ kind:'gap', cond:c, rule:g, meds:[], sev:'info' });
-    });
+    /* โรคหนึ่งมักมียาหลายกลุ่มให้เลือก มีกลุ่มใดกลุ่มหนึ่งก็ถือว่าครอบคลุมแล้ว
+       จึงบอกว่ายังไม่พบ เฉพาะเมื่อไม่มียาสำหรับโรคนั้นเลย */
+    const groups = (c.meds || []).filter(g => g.tags && g.tags.length);
+    if(groups.length){
+      const matched = groups.filter(g => active.some(m => g.tags.some(t => medTags(m).includes(t))));
+      if(matched.length){
+        const meds = active.filter(m => matched.some(g => g.tags.some(t => medTags(m).includes(t))));
+        out.push({ kind:'covered', cond:c, rule:matched[0], meds:meds, sev:'ok' });
+      } else {
+        out.push({ kind:'gap', cond:c, rule:null, groups:groups, meds:[], sev:'info' });
+      }
+    }
   });
-  const rank = {high:0, mod:1, low:2, info:3};
+  const rank = {high:0, mod:1, low:2, ok:3, info:4};
   out.sort((a,b) => rank[a.sev] - rank[b.sev]);
   return out;
 }
@@ -1992,6 +2021,7 @@ function renderHealth(){
   const checks = conditionChecks();
   const bad = checks.filter(x => x.kind === 'avoid');
   const gaps = checks.filter(x => x.kind === 'gap');
+  const covered = checks.filter(x => x.kind === 'covered');
   const sevTx = {high:Lx('ต้องระวังมาก','Take great care'), mod:Lx('ควรระวัง','Take care'), low:Lx('ข้อมูล','Note')};
 
   host.innerHTML = alCard +
@@ -2011,12 +2041,18 @@ function renderHealth(){
         '</div>').join('')+
     '</div>'+
 
-    (gaps.length ? '<div class="card"><h3>' + Lx('ยาที่มักใช้กับโรคนี้แต่ยังไม่พบในรายการ','Commonly used but not in your list') + '</h3>'+
+    (covered.length ? '<div class="card"><h3>' + Lx('โรคที่มียาในรายการแล้ว','Conditions your list already covers') + '</h3>'+
+      covered.map(x => '<div class="limrow" style="border-left-color:var(--good)">'+
+        '<div class="hd"><b>' + esc(condName(x.cond)) + '</b>'+
+        '<span class="sev good">' + Lx('มียาแล้ว','covered') + '</span></div>'+
+        '<p>' + esc(x.meds.map(m => m.name).join(', ')) + '</p></div>').join('') + '</div>' : '')+
+    (gaps.length ? '<div class="card"><h3>' + Lx('โรคที่ยังไม่พบยาในรายการ','Conditions with no matching medicine yet') + '</h3>'+
       '<p class="h">' + Lx('อาจเป็นเพราะยังไม่ได้บันทึกไว้ หรือแพทย์เลือกวิธีอื่นให้ ไม่ใช่ข้อบ่งชี้ว่าต้องใช้',
                            'You may simply not have recorded it, or your doctor chose another approach. This is not a sign you need it.') + '</p>'+
       gaps.map(x => '<div class="limrow" style="border-left-color:var(--ink-3)">'+
         '<div class="hd"><b>' + esc(condName(x.cond)) + '</b></div>'+
-        '<p>' + esc(L2(x.rule)) + '</p></div>').join('') + '</div>' : '')+
+        '<p>' + Lx('ยาที่แพทย์มักใช้','Commonly used') + ': ' +
+        esc((x.groups || []).map(g => L2(g)).join(' · ') || '-') + '</p></div>').join('') + '</div>' : '')+
 
     conds.map(c => '<button class="mrow" data-oc2="' + c.id + '" style="align-items:center;width:100%;text-align:left">'+
       '<span class="pill">🩺</span><span class="bd"><span class="nm">' + esc(condName(c)) + '</span>'+
@@ -3645,6 +3681,17 @@ function renderSettings(){
       : Lx('เบราว์เซอร์นี้ไม่รองรับ','Not supported in this browser');
   const sb = $('#shareBtn');
   if(sb){ sb.classList.toggle('hide', !canShareFiles()); sb.onclick = shareBackup; }
+  const av = $('#appVer');
+  if(av) av.textContent = Lx('เวอร์ชัน ' + APP_VERSION, 'Version ' + APP_VERSION);
+  const vc = $('#verCheck');
+  if(vc) vc.onclick = () => {
+    if(!swReg){ toast(Lx('ตรวจอัปเดตได้เมื่อเปิดผ่าน https เท่านั้น','Updates can only be checked over https')); return; }
+    vc.disabled = true; vc.textContent = Lx('กำลังตรวจ…','Checking…');
+    swReg.update().then(() => setTimeout(() => {
+      vc.disabled = false; vc.textContent = Lx('ตรวจอัปเดต','Check for updates');
+      if($('#updBar').classList.contains('hide')) toast(Lx('ใช้เวอร์ชันล่าสุดอยู่แล้ว','You are on the latest version'));
+    }, 1200)).catch(() => { vc.disabled = false; vc.textContent = Lx('ตรวจอัปเดต','Check for updates'); });
+  };
   const lb = $('#lastBackup');
   if(lb){
     const d = daysSince(DB.lastBackup);
@@ -4584,7 +4631,9 @@ const DICT = {
 'ระบุโรคที่เป็นอยู่ แล้วระบบจะตรวจให้ว่ายาที่กินอยู่มีตัวไหนต้องระวัง':'List what you live with and the app will flag medicines that need care',
 'ยาที่แพ้':'Allergies','ระบุยาที่แพ้':'Record your allergies',
 'ระบบจะเตือนทันทีถ้ามีรายการยาที่ตรงกัน':'The app flags any matching item straight away',
-'ยังไม่ได้ระบุยาที่แพ้':'No allergies recorded yet','โรคประจำตัวของฉัน':'My conditions','แตะที่ชื่อโรคเพื่อดูแนวทาง':'Tap a condition for guidance',
+'ยังไม่ได้ระบุยาที่แพ้':'No allergies recorded yet','โรคที่มียาในรายการแล้ว':'Conditions your list already covers','มียาแล้ว':'covered',
+'โรคที่ยังไม่พบยาในรายการ':'Conditions with no matching medicine yet','ยาที่แพทย์มักใช้':'Commonly used',
+'โรคประจำตัวของฉัน':'My conditions','แตะที่ชื่อโรคเพื่อดูแนวทาง':'Tap a condition for guidance',
 'ระบุหรือแก้ไขโรคประจำตัว':'Set or edit your conditions','โรคประจำตัว':'Health conditions',
 'ระบุโรคประจำตัว':'Set your conditions','ยังไม่ได้ระบุ':'Not set','สุขภาพ':'Health',
 'คู่ยา':'Pairs','โรคประจำตัวและการตรวจยากับโรค':'Your conditions and how your medicines fit them',
@@ -4599,7 +4648,9 @@ const DICT = {
 'สำรองข้อมูล':'Back up your data','ไฟล์เดียวกันทั้งสองแบบ เลือกวิธีที่สะดวกกว่า':'Same file either way — pick whichever suits you',
 'ส่งไปแอปอื่น เช่น Drive หรือ Files':'Send to another app such as Drive or Files',
 'บันทึกเป็นไฟล์ลงเครื่อง':'Save the file to this device',
-'ส่งไฟล์สำรองแล้ว':'Backup sent','ที่อยู่เว็บของข้อมูลชุดนี้':'Web address this data belongs to',
+'ส่งไฟล์สำรองแล้ว':'Backup sent','มีเวอร์ชันใหม่พร้อมใช้งาน':'A new version is ready','อัปเดตเลย':'Update now','ภายหลัง':'Later',
+'เวอร์ชันของแอป':'App version','ตรวจอัปเดต':'Check for updates',
+'ที่อยู่เว็บของข้อมูลชุดนี้':'Web address this data belongs to',
 'พื้นที่เก็บข้อมูลถาวร':'Persistent storage','กำลังตรวจสอบ':'Checking',
 'สำรองข้อมูลล่าสุด':'Last backup','ยังไม่เคยสำรอง':'Never backed up','วันนี้':'Today',
 'เคยใช้มาก่อน กู้จากไฟล์สำรอง':'Used it before? Restore from a backup file',
@@ -4940,9 +4991,48 @@ function boot(){
 }
 loadData().then(boot).catch(dataError);
 
-if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+/* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
+const APP_VERSION = '21';
+let swReg = null, updWaiting = null, updReloading = false;
+function showUpdateBar(w){
+  updWaiting = w;
+  const bar = $('#updBar'); if(!bar) return;
+  $('#updTxt').textContent = Lx('มีเวอร์ชันใหม่พร้อมใช้งาน','A new version is ready');
+  $('#updGo').textContent = Lx('อัปเดตเลย','Update now');
+  $('#updLater').textContent = Lx('ภายหลัง','Later');
+  bar.classList.remove('hide');
 }
+function applyUpdate(){
+  if(!updWaiting) { location.reload(); return; }
+  $('#updGo').textContent = Lx('กำลังอัปเดต…','Updating…');
+  $('#updGo').disabled = true;
+  updWaiting.postMessage({type:'SKIP_WAITING'});
+  setTimeout(() => { if(!updReloading){ updReloading = true; location.reload(); } }, 2500);
+}
+function initUpdates(){
+  if(!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    swReg = reg;
+    if(reg.waiting && navigator.serviceWorker.controller) showUpdateBar(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      if(!w) return;
+      w.addEventListener('statechange', () => {
+        if(w.state === 'installed' && navigator.serviceWorker.controller) showUpdateBar(w);
+      });
+    });
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(updReloading) return;
+    updReloading = true; location.reload();
+  });
+  const check = () => { if(swReg) swReg.update().catch(() => {}); };
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) check(); });
+  setInterval(check, 30 * 60 * 1000);
+}
+$('#updGo').onclick = applyUpdate;
+$('#updLater').onclick = () => $('#updBar').classList.add('hide');
+window.addEventListener('load', initUpdates);
 </script>
 </body>
 </html>
