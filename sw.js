@@ -1,5 +1,5 @@
 /* iCareU — service worker: ทำให้เปิดใช้ได้แม้ไม่มีอินเทอร์เน็ต */
-const CACHE = 'icareu-v13';
+const CACHE = 'icareu-v14';
 const SHELL = ['./', './index.html', './data.json', './manifest.json',
                './icon.svg', './favicon.svg', './icon-32.png', './icon-180.png', './icon-512.png', './logo.svg'];
 

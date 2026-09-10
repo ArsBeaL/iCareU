@@ -270,9 +270,11 @@ html[data-dark="1"] .tagpick button.on{color:#0E1419}
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;
   background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:saturate(160%) blur(14px);
   border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);display:none}
-.nav .in{max-width:660px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+.nav .in{max-width:660px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr)}
+.nav button{min-width:0}
+.nav button:last-child span,.nav button span{white-space:nowrap}
 .nav button{padding:9px 0 10px;display:flex;flex-direction:column;align-items:center;gap:3px;
-  font-size:10.5px;font-weight:600;color:var(--ink-3)}
+  font-size:10px;font-weight:600;color:var(--ink-3);overflow:hidden}
 .nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 .nav button.on{color:var(--accent)}
 .badge{position:absolute;transform:translate(11px,-4px);min-width:16px;height:16px;padding:0 4px;border-radius:999px;
@@ -456,6 +458,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
       </div>
     </div>
     <div id="tdWarn"></div>
+    <div id="tdCond"></div>
     <div id="tdDose"></div>
     <div id="tdStock"></div>
     <div id="tdWater"></div>
@@ -536,6 +539,19 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
       </div>
       <div id="fdaOut" style="margin-top:12px"></div>
     </div>
+  </section>
+
+  <!-- ---- สุขภาพ ---- -->
+  <section class="view" id="v-health">
+    <h2 class="vt">โรคประจำตัวและยาของคุณ</h2>
+    <p class="vs">ระบุโรคที่เป็นอยู่ แล้วระบบจะตรวจให้ว่ายาที่กินอยู่มีตัวไหนต้องระวัง</p>
+    <div class="card">
+      <h3>โรคประจำตัวของฉัน</h3>
+      <p class="h">แตะที่ชื่อโรคเพื่อดูแนวทาง</p>
+      <div class="tagpick" id="condChips" style="margin-bottom:12px"></div>
+      <button class="btn ghost full sm" id="condEdit">เลือกหรือแก้ไขโรคประจำตัว</button>
+    </div>
+    <div id="healthBody"></div>
   </section>
 
   <!-- ---- ตั้งค่า ---- -->
@@ -702,7 +718,8 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
       <button data-v="today" data-tip="รายการที่ต้องกินวันนี้ เรียงตามเวลา" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>วันนี้</button>
       <button data-v="meds" data-tip="รายการยาและอาหารเสริมทั้งหมด"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M8 8V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3M12 12v5M9.5 14.5h5"/></svg>รายการ</button>
       <button data-v="cal" data-tip="ปฏิทินย้อนหลังและสถิติการกินยา"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>ปฏิทิน</button>
-      <button data-v="check" data-tip="ตรวจว่ายาสองอย่างกินพร้อมกันได้ไหม"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.4 8.3-8 9-4.6-.7-8-4-8-9V7z"/><path d="M9.5 12.5l1.8 1.8 3.4-3.6"/></svg>ตรวจคู่ยา</button>
+      <button data-v="check" data-tip="ตรวจว่ายาสองอย่างกินพร้อมกันได้ไหม"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.4 8.3-8 9-4.6-.7-8-4-8-9V7z"/><path d="M9.5 12.5l1.8 1.8 3.4-3.6"/></svg>คู่ยา</button>
+      <button data-v="health" data-tip="โรคประจำตัวและการตรวจยากับโรค" style="position:relative"><svg viewBox="0 0 24 24"><path d="M4.5 4.5h3v3M4.5 4.5v6a4 4 0 0 0 8 0v-6M9.5 4.5h3v3"/><path d="M12.5 10.5a4.2 4.2 0 0 0 4.2 4.2 2.8 2.8 0 0 1 2.8 2.8v1"/><circle cx="19.5" cy="20" r="2"/></svg>สุขภาพ<span class="badge hide" id="condBadge"></span></button>
       <button data-v="set" data-tip="ธีม การเตือน โปรไฟล์ และข้อมูลสำรอง"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 8.4a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>ตั้งค่า</button>
     </div>
   </div>
@@ -1528,7 +1545,7 @@ function newProfile(name, emoji){
   return {
     id:uid(), name:name, emoji:emoji||'🧑',
     pin:null, salt:null,
-    body:{sex:'', birth:null, weight:null, height:null, pregnant:false},
+    body:{sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[]},
     settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:10, autoLock:5, lang:'th', dateFmt:'dmy' },
     meds:[], logs:{}, notified:{}, snoozes:{}
   };
@@ -1853,6 +1870,200 @@ function customSheet(){
   };
 }
 
+
+/* ================================================================
+   โรคประจำตัว และการตรวจว่ายาที่ใช้อยู่เข้ากับโรคหรือไม่
+   ================================================================ */
+let CONDITIONS = [];
+function condById(id){ return CONDITIONS.find(c => c.id === id) || null; }
+function myConditions(){ return ((P.body && P.body.conditions) || []).map(condById).filter(Boolean); }
+function L2(o){ return o ? (LANG === 'en' ? (o.en || o.th) : o.th) : ''; }
+function condName(c){ return LANG === 'en' ? (c.en || c.th) : c.th; }
+function condCat(c){ return LANG === 'en' ? (c.cate || c.cat) : c.cat; }
+
+/* ตรวจยาที่ใช้อยู่กับโรคที่ระบุไว้ */
+function conditionChecks(){
+  const out = [], conds = myConditions();
+  const active = (P.meds || []).filter(m => m.active);
+  conds.forEach(c => {
+    (c.avoid || []).forEach(a => {
+      if(!a.tags || !a.tags.length) return;
+      const hits = active.filter(m => a.tags.some(t => medTags(m).includes(t)));
+      if(hits.length) out.push({ kind:'avoid', cond:c, rule:a, meds:hits, sev:a.sev || 'mod' });
+    });
+    (c.meds || []).forEach(g => {
+      if(!g.tags || !g.tags.length) return;
+      const has = active.some(m => g.tags.some(t => medTags(m).includes(t)));
+      if(!has) out.push({ kind:'gap', cond:c, rule:g, meds:[], sev:'info' });
+    });
+  });
+  const rank = {high:0, mod:1, low:2, info:3};
+  out.sort((a,b) => rank[a.sev] - rank[b.sev]);
+  return out;
+}
+function condAlertCount(){ return conditionChecks().filter(x => x.sev === 'high').length; }
+
+/* ---- เลือกโรคประจำตัว ---- */
+function conditionPicker(back){
+  let q = '';
+  const draw = () => {
+    const sel = (P.body.conditions || []);
+    const list = CONDITIONS.filter(c => {
+      if(!q.trim()) return true;
+      const s = q.trim().toLowerCase();
+      return (c.th + ' ' + c.en + ' ' + c.cat).toLowerCase().indexOf(s) >= 0;
+    });
+    const cats = [];
+    list.forEach(c => { if(cats.indexOf(condCat(c)) < 0) cats.push(condCat(c)); });
+    $('#cdBody').innerHTML =
+      '<input id="cdQ" placeholder="' + Lx('ค้นหาชื่อโรค','Search a condition') + '" value="' + esc(q) + '" autocomplete="off" style="margin-bottom:14px">'+
+      (sel.length ? '<p class="src" style="margin:-6px 0 12px">' +
+        Lx('เลือกไว้ ' + sel.length + ' โรค', sel.length + ' selected') + '</p>' : '')+
+      cats.map(cat =>
+        '<label class="fl">' + esc(cat) + '</label><div class="tagpick" style="margin-bottom:14px">'+
+        list.filter(c => condCat(c) === cat).map(c =>
+          '<button data-c="' + c.id + '"' + (sel.includes(c.id) ? ' class="on"' : '') + '>' + esc(condName(c)) + '</button>').join('')+
+        '</div>').join('')+
+      (list.length ? '' : '<div class="empty"><p>' + Lx('ไม่พบโรคนี้ในรายการ','Not in the list') + '</p></div>');
+    $$('#cdBody [data-c]').forEach(b => b.onclick = () => {
+      const id = b.dataset.c;
+      P.body.conditions = P.body.conditions || [];
+      const i = P.body.conditions.indexOf(id);
+      i >= 0 ? P.body.conditions.splice(i, 1) : P.body.conditions.push(id);
+      save();
+      const qi = $('#cdQ'); if(qi) q = qi.value;
+      draw();
+    });
+    const qi = $('#cdQ');
+    qi.oninput = () => { const pos = qi.selectionStart; q = qi.value; draw(); const n = $('#cdQ'); n.focus(); n.setSelectionRange(pos, pos); };
+  };
+  openSheet('<div class="shd"><b>' + Lx('โรคประจำตัว','Health conditions') + '</b>'+
+    '<button class="btn sm ghost" onclick="dismissSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:-8px 0 14px;line-height:1.6">' +
+    Lx('รายการนี้รวมโรคเรื้อรังที่พบบ่อยในผู้ใหญ่ไทย เลือกได้มากกว่าหนึ่งโรค ระบบใช้ข้อมูลนี้เพื่อเตือนว่ายาที่คุณกินอยู่ชนกับโรคไหม เก็บไว้ในเครื่องนี้เท่านั้น',
+       'This list covers chronic conditions common among Thai adults. Pick as many as apply. The app uses them to flag medicines that clash with your conditions, and keeps them on this device only.') + '</p>'+
+    '<div id="cdBody"></div>', back);
+  draw();
+}
+
+/* ---- หน้าสุขภาพ ---- */
+function renderHealth(){
+  const conds = myConditions();
+  const host = $('#healthBody'); if(!host) return;
+  $('#condChips').innerHTML = conds.length
+    ? conds.map(c => '<button data-oc="' + c.id + '">' + esc(condName(c)) + '</button>').join('')
+    : '<span style="font-size:13px;color:var(--ink-3)">' + Lx('ยังไม่ได้ระบุโรคประจำตัว','No conditions set yet') + '</span>';
+  $$('#condChips [data-oc]').forEach(b => b.onclick = () => condSheet(condById(b.dataset.oc)));
+
+  if(!conds.length){
+    host.innerHTML = '<div class="empty"><div class="big">🩺</div>'+
+      '<p>' + Lx('ระบุโรคประจำตัวแล้วระบบจะตรวจให้ว่ายาที่คุณกินอยู่มีตัวไหนที่ต้องระวัง',
+                 'Add your conditions and the app will flag medicines that need care') + '</p>'+
+      '<button class="btn" id="hEmpty">' + Lx('เลือกโรคประจำตัว','Choose your conditions') + '</button></div>';
+    $('#hEmpty').onclick = () => conditionPicker(() => go('health'));
+    return;
+  }
+
+  const checks = conditionChecks();
+  const bad = checks.filter(x => x.kind === 'avoid');
+  const gaps = checks.filter(x => x.kind === 'gap');
+  const sevTx = {high:Lx('ต้องระวังมาก','Take great care'), mod:Lx('ควรระวัง','Take care'), low:Lx('ข้อมูล','Note')};
+
+  host.innerHTML =
+    '<div class="card" style="border-color:' + (bad.length ? 'color-mix(in srgb,var(--danger) 26%,var(--line))' : 'var(--line)') + '">'+
+      '<h3>' + Lx('ยาที่ใช้อยู่กับโรคของคุณ','Your medicines against your conditions') + '</h3>'+
+      '<p class="h">' + (bad.length
+        ? Lx('พบ ' + bad.length + ' จุดที่ควรถามแพทย์หรือเภสัชกร', 'Found ' + bad.length + ' points to raise with your doctor or pharmacist')
+        : ((P.meds || []).filter(m => m.active).length
+            ? Lx('ไม่พบยาที่ชนกับโรคที่ระบุไว้','No medicines clash with the conditions you listed')
+            : Lx('ยังไม่มีรายการยาให้ตรวจ','No medicines to check yet'))) + '</p>'+
+      bad.map(x =>
+        '<div class="pairrow ' + x.sev + '">'+
+        '<div class="hd"><b>' + x.meds.map(m => esc(m.name)).join(', ') + '</b>'+
+        '<span class="sev ' + x.sev + '">' + sevTx[x.sev] + '</span></div>'+
+        '<p class="do">' + esc(L2(x.rule)) + '</p>'+
+        '<p class="gap">' + Lx('เกี่ยวกับโรค ','Relates to ') + esc(condName(x.cond)) + '</p>'+
+        '</div>').join('')+
+    '</div>'+
+
+    (gaps.length ? '<div class="card"><h3>' + Lx('ยาที่มักใช้กับโรคนี้แต่ยังไม่พบในรายการ','Commonly used but not in your list') + '</h3>'+
+      '<p class="h">' + Lx('อาจเป็นเพราะยังไม่ได้บันทึกไว้ หรือแพทย์เลือกวิธีอื่นให้ ไม่ใช่ข้อบ่งชี้ว่าต้องใช้',
+                           'You may simply not have recorded it, or your doctor chose another approach. This is not a sign you need it.') + '</p>'+
+      gaps.map(x => '<div class="limrow" style="border-left-color:var(--ink-3)">'+
+        '<div class="hd"><b>' + esc(condName(x.cond)) + '</b></div>'+
+        '<p>' + esc(L2(x.rule)) + '</p></div>').join('') + '</div>' : '')+
+
+    conds.map(c => '<button class="mrow" data-oc2="' + c.id + '" style="align-items:center;width:100%;text-align:left">'+
+      '<span class="pill">🩺</span><span class="bd"><span class="nm">' + esc(condName(c)) + '</span>'+
+      '<span class="tt">' + esc(condCat(c)) + Lx(' · แตะเพื่อดูแนวทาง',' · tap for guidance') + '</span></span>'+
+      '<svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;stroke:var(--ink-3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M9 18l6-6-6-6"/></svg></button>').join('')+
+
+    '<div class="card" style="background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 30%,transparent)">'+
+      '<p style="font-size:13px;color:var(--warn);margin:0;line-height:1.7"><b>' +
+      Lx('ข้อมูลในหน้านี้เป็นแนวทางเท่านั้น','Everything here is guidance only') + '</b><br>' +
+      Lx('เป็นการสรุปว่าแพทย์มักใช้ยากลุ่มใดกับโรคนี้ ไม่ใช่คำสั่งใช้ยาและไม่ใช่การวินิจฉัย ' +
+         'การเลือกยา ขนาดยา และระยะเวลา ต้องมาจากแพทย์ที่ตรวจคุณเท่านั้น ' +
+         'ห้ามเริ่ม หยุด หรือเปลี่ยนยาเองจากข้อมูลในหน้านี้',
+         'It summarises which drug classes doctors commonly use for a condition. It is not a prescription and not a diagnosis. ' +
+         'The choice of medicine, its dose and its duration must come from the doctor who examined you. ' +
+         'Never start, stop or change a medicine based on this page.') + '</p></div>';
+
+  $$('#healthBody [data-oc2]').forEach(b => b.onclick = () => condSheet(condById(b.dataset.oc2)));
+}
+
+/* ---- แผ่นรายละเอียดของโรคหนึ่ง ---- */
+function condSheet(c){
+  if(!c) return;
+  const sec = (t, body) => body ? '<h3 style="margin:16px 0 8px">' + t + '</h3>' + body : '';
+  const sevTx = {high:Lx('ต้องระวังมาก','Take great care'), mod:Lx('ควรระวัง','Take care'), low:Lx('ข้อมูล','Note')};
+  const active = (P.meds || []).filter(m => m.active);
+  openSheet('<div class="shd"><b>' + esc(condName(c)) + '</b>'+
+    '<button class="btn sm ghost" onclick="dismissSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    '<p style="font-size:13.5px;color:var(--ink-2);margin:-8px 0 6px;line-height:1.65">' + esc(L2(c.note)) + '</p>'+
+    sec(Lx('ยาที่แพทย์มักใช้กับโรคนี้','Medicines doctors commonly use'),
+      (c.meds || []).map(g => {
+        const has = g.tags && g.tags.length && active.some(m => g.tags.some(t => medTags(m).includes(t)));
+        return '<div class="limrow" style="border-left-color:' + (has ? 'var(--good)' : 'var(--ink-3)') + '">'+
+          '<div class="hd"><b>' + esc(L2(g)) + '</b>' +
+          (has ? '<span class="sev good">' + Lx('มีในรายการแล้ว','in your list') + '</span>' : '') + '</div></div>';
+      }).join(''))+
+    sec(Lx('ยาและอาหารเสริมที่ต้องระวังเมื่อมีโรคนี้','Medicines and supplements to watch with this condition'),
+      (c.avoid || []).map(a => {
+        const hits = a.tags && a.tags.length ? active.filter(m => a.tags.some(t => medTags(m).includes(t))) : [];
+        return '<div class="pairrow ' + (a.sev || 'mod') + '">'+
+          '<div class="hd"><b>' + (a.tags || []).map(t => esc(TAGS[t] ? Lx(TAGS[t].th, TAGS[t].en) : t)).join(', ') + '</b>'+
+          '<span class="sev ' + (a.sev || 'mod') + '">' + sevTx[a.sev || 'mod'] + '</span></div>'+
+          '<p class="do">' + esc(L2(a)) + '</p>'+
+          (hits.length ? '<p class="gap" style="color:var(--danger)">' + Lx('คุณมีในรายการ ','In your list: ') +
+            hits.map(m => esc(m.name)).join(', ') + '</p>' : '') + '</div>';
+      }).join(''))+
+    sec(Lx('สิ่งที่ควรทำและติดตาม','What to do and watch for'),
+      (c.watch || []).length ? '<div class="card" style="box-shadow:none"><div class="isec"><ul>' +
+        (c.watch || []).map(w => '<li>' + esc(L2(w)) + '</li>').join('') + '</ul></div></div>' : '')+
+    '<div class="src" style="margin-top:14px">' + Lx('อ้างอิง: ','Source: ') + esc(L2(c.src)) + '</div>'+
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:14px 0 0;line-height:1.65">' +
+    Lx('เป็นแนวทางทั่วไปเท่านั้น ไม่ใช่คำสั่งใช้ยาและไม่ครอบคลุมทุกกรณี ต้องปรึกษาแพทย์หรือเภสัชกรทุกครั้งก่อนเริ่มหรือปรับยา',
+       'General guidance only. Not a prescription and not exhaustive. Always consult a doctor or pharmacist before starting or changing a medicine.') + '</p>');
+}
+
+/* ---- แถบเตือนบนหน้าวันนี้ ---- */
+function renderCondAlert(){
+  paintCondBadge();
+  const host = $('#tdCond'); if(!host) return;
+  const bad = conditionChecks().filter(x => x.kind === 'avoid' && x.sev === 'high');
+  if(!bad.length){ host.innerHTML = ''; return; }
+  host.innerHTML = '<button class="mrow" id="cdBar" style="margin-bottom:18px;'+
+    'border-color:color-mix(in srgb,var(--danger) 32%,var(--line));background:var(--danger-bg)">'+
+    '<span class="pill" style="background:color-mix(in srgb,var(--danger) 16%,transparent)">🩺</span>'+
+    '<span class="bd"><span class="nm" style="color:var(--danger)">' +
+      Lx(bad.length + ' รายการที่ควรถามแพทย์เรื่องโรคประจำตัว',
+         bad.length + ' items to raise with your doctor about your conditions') + '</span>'+
+    '<span class="tt" style="color:var(--danger);opacity:.85">' +
+      esc(bad.slice(0,2).map(x => x.meds.map(m => m.name).join(', ') + ' · ' + condName(x.cond)).join(' / ')) + '</span></span>'+
+    '<svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;stroke:var(--danger);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M9 18l6-6-6-6"/></svg></button>';
+  $('#cdBar').onclick = () => go('health');
+}
+
 /* ---- คำถามกู้รหัส ---- */
 async function setQuestion(qObj, answer){
   const salt = makeSalt();
@@ -1874,7 +2085,7 @@ async function checkAnswer(answer){
     DEK = w.key;
     const obj = await openJSON(P.vault);
     VAULT_FIELDS.forEach(f => { P[f] = obj[f] !== undefined ? obj[f] : (f === 'meds' ? [] : {}); });
-    P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false}, P.body || {});
+    P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[]}, P.body || {});
     return true;
   }
   if(!P.ansHash || !P.ansSalt) return false;
@@ -2241,6 +2452,7 @@ function renderToday(){
   const uniq = conf.filter(c => { const k = [c.a.id,c.b.id,c.r.t].sort().join('|'); if(seen.has(k)) return false; seen.add(k); return true; });
   const nHigh = uniq.filter(c => c.r.sev === 'high').length;
   renderOverdose();
+  renderCondAlert();
   renderStock();
   renderWater();
   renderBackupNudge();
@@ -3174,7 +3386,7 @@ async function bioUnlock(auto){
       DEK = w.key;
       const obj = await openJSON(P.vault);
       VAULT_FIELDS.forEach(f => { P[f] = obj[f] !== undefined ? obj[f] : (f === 'meds' ? [] : {}); });
-      P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false}, P.body || {});
+      P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[]}, P.body || {});
     }
     enterApp();
   }catch(e){
@@ -3347,6 +3559,12 @@ function profileSheet(){
         '<input type="number" id="pW" min="1" max="400" step="0.1" placeholder="เช่น 62" value="' + (B.weight==null?'':B.weight) + '"></div>'+
         '<div class="fld"><label class="fl">ส่วนสูง (เซนติเมตร)</label>'+
         '<input type="number" id="pH" min="30" max="260" step="0.5" placeholder="เช่น 168" value="' + (B.height==null?'':B.height) + '"></div></div>'+
+      '<div class="fld"><label class="fl">โรคประจำตัว</label>'+
+        '<div class="tagpick" id="pCond">' +
+        (myConditions().length
+          ? myConditions().map(c => '<button class="on">' + esc(condName(c)) + '</button>').join('')
+          : '<span style="font-size:13px;color:var(--ink-3)">ยังไม่ได้ระบุ</span>') + '</div>'+
+        '<button class="btn ghost sm full" id="pCondBtn" style="margin-top:9px">เลือกโรคประจำตัว</button></div>'+
       (bmi ? '<div class="adv">ดัชนีมวลกาย ' + bmi.toFixed(1) + ' — ' +
         (bmi < 18.5 ? 'ต่ำกว่าเกณฑ์' : bmi < 23 ? 'อยู่ในเกณฑ์ปกติ' : bmi < 25 ? 'ท้วม' : bmi < 30 ? 'อ้วนระดับ 1' : 'อ้วนระดับ 2') +
         '<br><span style="font-size:12px;color:var(--ink-3)">เกณฑ์สำหรับผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก ไม่ใช้กับเด็ก หญิงตั้งครรภ์ และนักกีฬา</span></div>' : '')+
@@ -3365,6 +3583,7 @@ function profileSheet(){
     $$('#pEmo button').forEach(b => b.onclick = () => { sync(); P.emoji = b.dataset.e; draw(); });
     $$('#pSex button').forEach(b => b.onclick = () => { sync(); B.sex = b.dataset.v; if(b.dataset.v !== 'f') B.pregnant = false; draw(); });
     const pg = $('#pPreg'); if(pg) pg.onclick = () => { sync(); B.pregnant = !B.pregnant; draw(); };
+    const pc = $('#pCondBtn'); if(pc) pc.onclick = () => { sync(); conditionPicker(profileSheet); };
     window.__psync = sync;
   };
   const others = DB.profiles.filter(x => x.id !== P.id);
@@ -3711,6 +3930,11 @@ function notifItems(){
   return { ds:ds, doses:doses, pending:pending, late:late, soon:soon,
            conf:conf, low:stockStatus(), over:dailyIntake(ds).filter(x => x.pct > 100) };
 }
+function paintCondBadge(){
+  const el = $('#condBadge'); if(!el) return;
+  const n = condAlertCount();
+  el.textContent = n; el.classList.toggle('hide', n === 0);
+}
 function paintBell(){
   const el = $('#bellBadge'); if(!el) return;
   const n = notifItems();
@@ -3773,7 +3997,7 @@ function paintTop(){
   const ds = dosesFor(todayStr());
   const left = ds.filter(d => !d.status).length;
   $('#tbSub').textContent = ds.length ? (left ? 'เหลืออีก ' + left + ' รายการวันนี้' : 'ครบทุกรายการแล้ววันนี้') : 'ไม่มีรายการวันนี้';
-  paintBell();
+  paintBell(); paintCondBadge();
 }
 $('#whoTap').onclick = profileSheet;
 $('#btnLock').onclick = lockNow;
@@ -3799,6 +4023,8 @@ function go(v){
   if(v === 'meds') renderMeds();
   if(v === 'cal') renderCal();
   if(v === 'check') renderCheckPickers();
+  if(v === 'health') renderHealth();
+  paintCondBadge();
   if(v === 'set') renderSettings();
 }
 $$('.nav button').forEach(b => b.onclick = () => go(b.dataset.v));
@@ -3807,6 +4033,7 @@ $$('#medFilter button').forEach(b => b.onclick = () => {
   $$('#medFilter button').forEach(x => x.classList.toggle('on', x === b));
   renderMeds();
 });
+$('#condEdit').onclick = () => conditionPicker(() => go('health'));
 $('#btnAdd').onclick = () => medEditor(null);
 window.closeSheet = closeSheet;
 
@@ -4191,6 +4418,12 @@ const DICT = {
 'ยังไม่มีชื่อนี้ในคลัง เพิ่มเข้าคลังยาส่วนตัว':'Not in the library yet — add it to my drug library',
 'คลังยาส่วนตัว':'My drug library','ยาที่คุณเพิ่มเองนอกเหนือจากคลังหลัก':'Drugs you added beyond the built-in library',
 'เปิดคลังยาส่วนตัว':'Open my drug library','เพิ่มเอง':'Added by me',
+'โรคประจำตัวและยาของคุณ':'Your conditions and your medicines',
+'ระบุโรคที่เป็นอยู่ แล้วระบบจะตรวจให้ว่ายาที่กินอยู่มีตัวไหนต้องระวัง':'List what you live with and the app will flag medicines that need care',
+'โรคประจำตัวของฉัน':'My conditions','แตะที่ชื่อโรคเพื่อดูแนวทาง':'Tap a condition for guidance',
+'เลือกหรือแก้ไขโรคประจำตัว':'Choose or edit your conditions','โรคประจำตัว':'Health conditions',
+'เลือกโรคประจำตัว':'Choose your conditions','ยังไม่ได้ระบุ':'Not set','สุขภาพ':'Health',
+'คู่ยา':'Pairs','โรคประจำตัวและการตรวจยากับโรค':'Your conditions and how your medicines fit them',
 'โปรไฟล์ของฉัน':'My profile','บันทึกข้อมูลส่วนตัว':'Save my details','สลับผู้ใช้':'Switch profile',
 'แต่ละคนมีรายการยา ประวัติ และรหัส PIN ของตัวเอง สลับแล้วต้องใส่รหัสของคนนั้น':'Each person keeps their own items, history and PIN. Switching asks for their PIN.',
 'ยังมีแค่โปรไฟล์เดียวในเครื่องนี้':'Only one profile on this device so far','เพิ่มโปรไฟล์ใหม่':'Add another profile',
@@ -4492,7 +4725,8 @@ function migrate(){
     if(p.settings.nag === true) p.settings.nag = 10;
     if(p.settings.nag === false) p.settings.nag = 0;
     p.settings.nag = +p.settings.nag || 0;
-    p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false}, p.body || {});
+    p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[]}, p.body || {});
+    if(!Array.isArray(p.body.conditions)) p.body.conditions = [];
     p.logs = p.logs || {}; p.notified = p.notified || {}; p.snoozes = p.snoozes || {}; p.meds = p.meds || [];
     p.meds.forEach(m => {
       m.freq = m.freq || {mode:'daily'};
@@ -4513,7 +4747,7 @@ async function loadData(){
   const j = await r.json();
   if(!j || !Array.isArray(j.rules) || !Array.isArray(j.catalog) || !j.info) throw new Error('bad data');
   RULES = j.rules; CATALOG = j.catalog; INFO = j.info;
-  BRANDS = j.brands || []; SIZES = j.sizes || {};
+  BRANDS = j.brands || []; SIZES = j.sizes || {}; CONDITIONS = j.conditions || [];
 }
 function dataError(e){
   $('#lock').style.display = 'flex';
