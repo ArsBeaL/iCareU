@@ -42,6 +42,7 @@ python3 -m http.server 8000
 | [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) | แหล่งอ้างอิงทางการแพทย์ทั้งหมด |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | สรุปสำหรับส่งต่อให้คนหรือ AI ทำต่อ |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | ประวัติการพัฒนาแต่ละรอบ |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | สิ่งที่ทำแล้วและสิ่งที่ยังค้าง |
 
 ## ข้อมูลอยู่ที่ไหน
 

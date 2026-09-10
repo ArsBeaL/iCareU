@@ -405,6 +405,11 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 .chip.wait{background:var(--warn-bg);color:var(--warn);font-weight:650}
 .chip.wait b{font-weight:700;font-variant-numeric:tabular-nums}
 .waitline{margin-top:7px;font-size:12px;color:var(--warn);line-height:1.5}
+.drow{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--line-2)}
+.drow:last-of-type{border-bottom:0}
+.drow .dl{flex:1;font-size:13.5px;color:var(--ink-2)}
+.drow .dv{font-size:15.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.dn{font-size:12px;color:var(--ink-3);line-height:1.55;margin:0 0 6px}
 .numrow{display:flex;gap:8px}
 .numrow input{flex:1;min-width:0}
 .numrow select{width:auto;flex:none;max-width:52%}
@@ -1578,7 +1583,7 @@ function newProfile(name, emoji){
   return {
     id:uid(), name:name, emoji:emoji||'🧑',
     pin:null, salt:null,
-    body:{sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[]},
+    body:{sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light', vitals:{sys:null,dia:null,hr:null,at:null}},
     settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:10, autoLock:5, lang:'th', dateFmt:'dmy' },
     meds:[], logs:{}, notified:{}, snoozes:{}
   };
@@ -2149,6 +2154,120 @@ function allergyChecks(){
   return out;
 }
 
+
+/* ================================================================
+   สัญญาณชีพ และค่าที่คำนวณได้จากข้อมูลร่างกาย
+   ================================================================ */
+const ACTIVITY = [
+  {id:'sed',  f:1.2,   th:'นั่งเป็นหลัก',      en:'Mostly sitting',    dth:'แทบไม่ได้ออกกำลังกาย',           den:'Little or no exercise'},
+  {id:'light',f:1.375, th:'เบา',              en:'Light',             dth:'ออกกำลังกายเบา 1–3 วันต่อสัปดาห์', den:'Light exercise 1–3 days a week'},
+  {id:'mod',  f:1.55,  th:'ปานกลาง',          en:'Moderate',          dth:'ออกกำลังกาย 3–5 วันต่อสัปดาห์',   den:'Exercise 3–5 days a week'},
+  {id:'high', f:1.725, th:'หนัก',             en:'Hard',              dth:'ออกกำลังกาย 6–7 วันต่อสัปดาห์',   den:'Exercise 6–7 days a week'},
+  {id:'vhigh',f:1.9,   th:'หนักมาก',          en:'Very hard',         dth:'ออกกำลังกายหนักทุกวัน หรือใช้แรงงานหนัก', den:'Hard daily training or heavy physical work'}
+];
+function activityOf(){ return ACTIVITY.find(a => a.id === ((P.body && P.body.activity) || 'light')) || ACTIVITY[1]; }
+
+/* อัตราการเผาผลาญขั้นพื้นฐาน สูตร Mifflin-St Jeor */
+function bmrOf(){
+  const b = P && P.body; const a = ageOf();
+  if(!b || !b.weight || !b.height || a === null) return null;
+  const base = 10 * b.weight + 6.25 * b.height - 5 * a;
+  if(b.sex === 'm') return Math.round(base + 5);
+  if(b.sex === 'f') return Math.round(base - 161);
+  return Math.round(base - 78);   /* ไม่ระบุเพศ ใช้ค่ากลางระหว่างชายกับหญิง */
+}
+function tdeeOf(){ const b = bmrOf(); return b === null ? null : Math.round(b * activityOf().f); }
+/* อัตราส่วนเอวต่อส่วนสูง */
+function whtrOf(){
+  const b = P && P.body;
+  if(!b || !b.waist || !b.height) return null;
+  return b.waist / b.height;
+}
+function whtrClass(v){
+  if(v === null) return null;
+  if(v < 0.4)  return {k:'low',  th:'ต่ำกว่าเกณฑ์ทั่วไป',      en:'below the usual range'};
+  if(v < 0.5)  return {k:'ok',   th:'อยู่ในเกณฑ์ดี',           en:'in the healthy range'};
+  if(v < 0.6)  return {k:'mod',  th:'เริ่มเสี่ยงโรคอ้วนลงพุง', en:'increased central obesity risk'};
+  return             {k:'high', th:'เสี่ยงโรคอ้วนลงพุงสูง',   en:'high central obesity risk'};
+}
+function bmiClass(v){
+  if(v < 18.5) return {k:'mod',  th:'ต่ำกว่าเกณฑ์',   en:'below the healthy range'};
+  if(v < 23)   return {k:'ok',   th:'อยู่ในเกณฑ์ปกติ', en:'in the healthy range'};
+  if(v < 25)   return {k:'mod',  th:'ท้วม',            en:'overweight'};
+  if(v < 30)   return {k:'high', th:'อ้วนระดับ 1',     en:'obesity class 1'};
+  return            {k:'high', th:'อ้วนระดับ 2',     en:'obesity class 2'};
+}
+/* ระดับความดันโลหิต ตามเกณฑ์ที่สมาคมความดันโลหิตสูงแห่งประเทศไทยใช้ */
+function bpClass(sys, dia){
+  if(!sys || !dia) return null;
+  if(sys >= 180 || dia >= 110) return {k:'high', th:'ความดันสูงระดับ 3',   en:'grade 3 hypertension'};
+  if(sys >= 160 || dia >= 100) return {k:'high', th:'ความดันสูงระดับ 2',   en:'grade 2 hypertension'};
+  if(sys >= 140 || dia >= 90)  return {k:'high', th:'ความดันสูงระดับ 1',   en:'grade 1 hypertension'};
+  if(sys >= 130 || dia >= 85)  return {k:'mod',  th:'ค่อนไปทางสูง',        en:'high-normal'};
+  if(sys >= 120 || dia >= 80)  return {k:'ok',   th:'ปกติ',                en:'normal'};
+  if(sys < 90  || dia < 60)    return {k:'mod',  th:'ค่อนข้างต่ำ',          en:'on the low side'};
+  return                             {k:'ok',   th:'ดีมาก',               en:'optimal'};
+}
+function hrClass(bpm){
+  if(!bpm) return null;
+  if(bpm < 50)  return {k:'mod',  th:'ช้ากว่าปกติ',  en:'slower than usual'};
+  if(bpm < 60)  return {k:'ok',   th:'ค่อนข้างช้า พบได้ในคนที่ออกกำลังกายสม่ำเสมอ', en:'on the slow side, common in regular exercisers'};
+  if(bpm <= 100) return {k:'ok',  th:'อยู่ในเกณฑ์ปกติ', en:'in the normal range'};
+  if(bpm <= 120) return {k:'mod', th:'เร็วกว่าปกติ',   en:'faster than usual'};
+  return              {k:'high', th:'เร็วมาก',        en:'very fast'};
+}
+function fmtNum(n){ return Number(n).toLocaleString(LANG === 'en' ? 'en-US' : 'th-TH'); }
+
+/* กล่องสรุปค่าที่คำนวณได้ */
+function derivedBlock(){
+  const b = (P && P.body) || {};
+  const a = ageOf(), bmi = bmiOf(), whtr = whtrOf(), bmr = bmrOf(), tdee = tdeeOf();
+  const v = b.vitals || {};
+  const bp = bpClass(v.sys, v.dia), hr = hrClass(v.hr);
+  const row = (label, value, cls, note) =>
+    '<div class="drow"><span class="dl">' + label + '</span>'+
+    '<span class="dv">' + value + '</span>'+
+    (cls ? '<span class="sev ' + (cls.k === 'ok' ? 'good' : cls.k === 'high' ? 'high' : 'mod') + '">' + esc(L2(cls)) + '</span>' : '')+
+    '</div>' + (note ? '<p class="dn">' + note + '</p>' : '');
+
+  const missing = [];
+  if(!b.weight) missing.push(Lx('น้ำหนัก','weight'));
+  if(!b.height) missing.push(Lx('ส่วนสูง','height'));
+  if(a === null) missing.push(Lx('วันเกิด','date of birth'));
+  if(!b.sex) missing.push(Lx('เพศ','sex'));
+
+  let h = '<div class="card" style="box-shadow:none"><h3>' + Lx('ค่าที่ระบบคำนวณให้','Worked out for you') + '</h3>'+
+    '<p class="h">' + Lx('คำนวณจากข้อมูลที่คุณกรอกไว้ ไม่ต้องกรอกซ้ำ','Derived from what you entered — nothing extra to fill in') + '</p>';
+
+  if(bmi !== null) h += row(Lx('ดัชนีมวลกาย BMI','Body mass index'), bmi.toFixed(1), bmiClass(bmi),
+      Lx('เกณฑ์ผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก','WHO Asian adult cut-offs'));
+  if(whtr !== null) h += row(Lx('เอวต่อส่วนสูง WHtR','Waist-to-height ratio'), whtr.toFixed(2), whtrClass(whtr),
+      Lx('ควรต่ำกว่า 0.5 คือรอบเอวไม่เกินครึ่งหนึ่งของส่วนสูง','Aim under 0.5 — keep your waist under half your height'));
+  if(bmr !== null) h += row(Lx('พลังงานขั้นต่ำ BMR','Basal metabolic rate'), fmtNum(bmr) + Lx(' กิโลแคลอรีต่อวัน',' kcal a day'), null,
+      Lx('พลังงานที่ร่างกายใช้ตอนพักเฉย ๆ ทั้งวัน คำนวณด้วยสูตร Mifflin-St Jeor','What your body burns at complete rest, using the Mifflin-St Jeor equation'));
+  if(tdee !== null) h += row(Lx('พลังงานที่ใช้จริง TDEE','Total daily energy'), fmtNum(tdee) + Lx(' กิโลแคลอรีต่อวัน',' kcal a day'), null,
+      Lx('รวมกิจกรรมระดับ ','Includes activity level ') + esc(L2(activityOf())) + Lx(' แล้ว',''));
+  if(bp) h += row(Lx('ความดันโลหิต','Blood pressure'), v.sys + '/' + v.dia + Lx(' มม.ปรอท',' mmHg'), bp,
+      bp.k === 'high' ? Lx('ค่าครั้งเดียวยังไม่ใช่การวินิจฉัย ต้องวัดซ้ำหลายวันและให้แพทย์ประเมิน',
+                           'A single reading is not a diagnosis — repeat over several days and let a doctor assess it') : '');
+  if(hr) h += row(Lx('ชีพจรขณะพัก','Resting heart rate'), v.hr + Lx(' ครั้งต่อนาที',' bpm'), hr, '');
+
+  if(missing.length) h += '<p class="dn" style="margin-top:10px">' +
+    Lx('กรอก ' + missing.join(' ') + ' เพิ่ม แล้วระบบจะคำนวณให้ครบ',
+       'Add your ' + missing.join(', ') + ' and the rest will be worked out') + '</p>';
+
+  h += '<p class="dn" style="margin-top:12px">' +
+    Lx('ค่าเหล่านี้เป็นการประมาณสำหรับผู้ใหญ่สุขภาพดี ไม่ใช้กับเด็ก หญิงตั้งครรภ์ นักกีฬาที่มีกล้ามเนื้อมาก และผู้ที่มีภาวะบวมน้ำ',
+       'These are estimates for healthy adults. They do not apply to children, pregnancy, very muscular athletes, or anyone with fluid retention.') + '</p></div>';
+  return h;
+}
+function refreshDerived(){
+  const el = $('#pDerived');
+  if(el) el.innerHTML = derivedBlock();
+  const ag = $('#pAgeLine');
+  if(ag){ const a = ageOf(); ag.textContent = a === null ? '' : Lx('อายุ ' + a + ' ปี', 'Age ' + a); }
+}
+
 /* ---- แผ่นระบุยาที่แพ้ ---- */
 function allergySheet(back){
   const draw = () => {
@@ -2257,7 +2376,7 @@ async function checkAnswer(answer){
     DEK = w.key;
     const obj = await openJSON(P.vault);
     VAULT_FIELDS.forEach(f => { P[f] = obj[f] !== undefined ? obj[f] : (f === 'meds' ? [] : {}); });
-    P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[]}, P.body || {});
+    P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light', vitals:{sys:null,dia:null,hr:null,at:null}}, P.body || {});
     return true;
   }
   if(!P.ansHash || !P.ansSalt) return false;
@@ -2866,11 +2985,23 @@ function overText(d){
 }
 /* ช่องวันที่ที่แสดงผลตามรูปแบบที่ตั้งไว้ โดยยังใช้ตัวเลือกวันที่ของระบบ */
 function dateField(id, val, ph){
-  return '<div class="datefield">'+
-    '<span class="dtxt">' + (val ? esc(fmtDate(val)) : '<i>' + ph + '</i>') + '</span>'+
+  return '<div class="datefield" data-ph="' + esc(ph) + '">'+
+    '<span class="dtxt" id="' + id + 'Txt">' + (val ? esc(fmtDate(val)) : '<i>' + esc(ph) + '</i>') + '</span>'+
     '<input type="date" id="' + id + '" value="' + esc(val || '') + '">'+
-    (val ? '<button class="dclr" data-clr="' + id + '">×</button>' : '')+
+    '<button class="dclr' + (val ? '' : ' hide') + '" data-clr="' + id + '">×</button>'+
     '</div>';
+}
+/* อัปเดตเฉพาะข้อความที่แสดง ไม่วาดฟอร์มใหม่ ไม่อย่างนั้นปฏิทินของระบบจะปิดกลางคัน
+   ทำให้ต้องเปิดใหม่ทุกครั้งที่เลือกปี เดือน และวัน */
+function refreshDateField(id){
+  const inp = $('#' + id); if(!inp) return;
+  const wrap = inp.closest('.datefield');
+  const ph = wrap ? (wrap.dataset.ph || '') : '';
+  const v = inp.value;
+  const t = $('#' + id + 'Txt');
+  if(t) t.innerHTML = v ? esc(fmtDate(v)) : '<i>' + esc(ph) + '</i>';
+  const c = document.querySelector('[data-clr="' + id + '"]');
+  if(c) c.classList.toggle('hide', !v);
 }
 const WATER_UNITS = ['แก้ว','ขวด','มิลลิลิตร'];
 const WATER_VOL = {'แก้ว':250,'ขวด':600,'มิลลิลิตร':1};
@@ -3041,11 +3172,17 @@ function drawEditor(){
     if(d.type === 'water'){ d.strength = WATER_VOL[d.unit] || d.strength; }
     drawEditor();
   }; });
-  ['#fStart','#fEnd'].forEach(s => { const e = $(s); if(e) e.onchange = () => { sync(); drawEditor(); }; });
+  ['fStart','fEnd'].forEach(id => {
+    const e = $('#' + id); if(!e) return;
+    e.onchange = () => { sync(); refreshDateField(id); };
+  });
   $$('#edBody [data-clr]').forEach(b => b.onclick = e => {
     e.preventDefault(); e.stopPropagation();
-    sync(); if(b.dataset.clr === 'fEnd') d.end = ''; else d.start = '';
-    drawEditor();
+    const id = b.dataset.clr, inp = $('#' + id);
+    if(inp) inp.value = '';
+    sync();
+    if(id === 'fEnd') d.end = ''; else d.start = '';
+    refreshDateField(id);
   });
   if($('#fPick')) $('#fPick').onclick = () => {
     sync();
@@ -3565,7 +3702,7 @@ async function bioUnlock(auto){
       DEK = w.key;
       const obj = await openJSON(P.vault);
       VAULT_FIELDS.forEach(f => { P[f] = obj[f] !== undefined ? obj[f] : (f === 'meds' ? [] : {}); });
-      P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[]}, P.body || {});
+      P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light', vitals:{sys:null,dia:null,hr:null,at:null}}, P.body || {});
     }
     enterApp();
   }catch(e){
@@ -3598,6 +3735,8 @@ function bodyLine(){
   if(a !== null) parts.push(a + ' ปี');
   if(b.weight) parts.push(b.weight + ' กก.');
   if(b.height) parts.push(b.height + ' ซม.');
+  if(b.waist) parts.push('เอว ' + b.waist + ' ซม.');
+  if(b.vitals && b.vitals.sys && b.vitals.dia) parts.push(b.vitals.sys + '/' + b.vitals.dia);
   if(b.pregnant) parts.push('ตั้งครรภ์');
   return parts.length ? ' · ' + parts.join(' · ') : ' · ยังไม่ได้กรอกข้อมูลร่างกาย';
 }
@@ -3728,6 +3867,7 @@ $('#btnBell').onclick = notifSheet;
 function profileSheet(){
   const B = P.body;
   const draw = () => {
+    const V = B.vitals || (B.vitals = {sys:null,dia:null,hr:null,at:null});
     const a = ageOf(), bmi = bmiOf();
     $('#pBody').innerHTML =
       '<div class="fld"><label class="fl">ชื่อ</label><input id="pName" value="' + esc(P.name) + '"></div>'+
@@ -3744,11 +3884,17 @@ function profileSheet(){
         '<button class="sw' + (B.pregnant ? ' on' : '') + '" id="pPreg"></button></div>' : '')+
       '<div class="fld"><label class="fl">วันเกิด</label>'+
         dateField('pBirth', B.birth, 'เลือกวันเกิด')+
-        (a !== null ? '<p class="src" style="margin-top:6px">อายุ ' + a + ' ปี</p>' : '') + '</div>'+
+        '<p class="src" style="margin-top:6px" id="pAgeLine">' + (a !== null ? 'อายุ ' + a + ' ปี' : '') + '</p></div>'+
       '<div class="two"><div class="fld"><label class="fl">น้ำหนัก (กิโลกรัม)</label>'+
         '<input type="number" id="pW" min="1" max="400" step="0.1" placeholder="เช่น 62" value="' + (B.weight==null?'':B.weight) + '"></div>'+
         '<div class="fld"><label class="fl">ส่วนสูง (เซนติเมตร)</label>'+
         '<input type="number" id="pH" min="30" max="260" step="0.5" placeholder="เช่น 168" value="' + (B.height==null?'':B.height) + '"></div></div>'+
+      '<div class="two"><div class="fld"><label class="fl">เส้นรอบเอว (เซนติเมตร)</label>'+
+        '<input type="number" id="pWaist" min="30" max="200" step="0.5" placeholder="เช่น 80" value="' + (B.waist==null?'':B.waist) + '"></div>'+
+        '<div class="fld"><label class="fl">ระดับกิจกรรม</label>'+
+        '<select id="pAct">' + ACTIVITY.map(x => '<option value="' + x.id + '"' + (x.id===(B.activity||'light')?' selected':'') + '>' + esc(L2(x)) + '</option>').join('') + '</select></div></div>'+
+      '<p class="src" style="margin:-6px 0 14px">' + esc(LANG === 'en' ? activityOf().den : activityOf().dth) +
+        ' · ' + Lx('วัดรอบเอวที่ระดับสะดือ หายใจออกตามปกติ ไม่แขม่วท้อง','Measure at navel level, breathing out normally, without pulling in') + '</p>'+
       '<div class="fld"><label class="fl">โรคประจำตัว</label>'+
         '<div class="tagpick" id="pCond">' +
         (myConditions().length
@@ -3761,6 +3907,19 @@ function profileSheet(){
           ? myAllergies().map(a => '<button class="on" style="background:var(--danger);border-color:var(--danger)">⚠️ ' + esc(a.label) + '</button>').join('')
           : '<span style="font-size:13px;color:var(--ink-3)">ยังไม่ได้ระบุ</span>') + '</div>'+
         '<button class="btn ghost sm full" id="pAlBtn" style="margin-top:9px">ระบุยาที่แพ้</button></div>'+
+      '</div>'+
+      '<div class="card" style="box-shadow:none"><h3>สัญญาณชีพ</h3>'+
+      '<p class="h">กรอกค่าที่วัดได้ล่าสุด ระบบจะบอกว่าอยู่ในเกณฑ์ไหน</p>'+
+      '<div class="three">'+
+        '<div><label class="fl">ตัวบน</label><input type="number" id="pSys" min="50" max="260" placeholder="120" value="' + (V.sys==null?'':V.sys) + '"></div>'+
+        '<div><label class="fl">ตัวล่าง</label><input type="number" id="pDia" min="30" max="160" placeholder="80" value="' + (V.dia==null?'':V.dia) + '"></div>'+
+        '<div><label class="fl">ชีพจร</label><input type="number" id="pHr" min="25" max="220" placeholder="72" value="' + (V.hr==null?'':V.hr) + '"></div>'+
+      '</div>'+
+      '<p class="src" style="margin-top:8px">' + (V.at ? 'วัดเมื่อ ' + fmtDate(V.at) : 'ยังไม่ได้กรอก') +
+        ' · นั่งพัก 5 นาทีก่อนวัด และวัดซ้ำอีกครั้งห่างกัน 1 ถึง 2 นาที</p>'+
+      '</div>'+
+      '<div id="pDerived">' + derivedBlock() + '</div>'+
+      '<div class="card" style="box-shadow:none;display:none">'+
       (bmi ? '<div class="adv">ดัชนีมวลกาย ' + bmi.toFixed(1) + ' — ' +
         (bmi < 18.5 ? 'ต่ำกว่าเกณฑ์' : bmi < 23 ? 'อยู่ในเกณฑ์ปกติ' : bmi < 25 ? 'ท้วม' : bmi < 30 ? 'อ้วนระดับ 1' : 'อ้วนระดับ 2') +
         '<br><span style="font-size:12px;color:var(--ink-3)">เกณฑ์สำหรับผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก ไม่ใช้กับเด็ก หญิงตั้งครรภ์ และนักกีฬา</span></div>' : '')+
@@ -3770,11 +3929,25 @@ function profileSheet(){
       if(g('#pBirth')) B.birth = g('#pBirth').value || null;
       if(g('#pW')) B.weight = g('#pW').value === '' ? null : +g('#pW').value;
       if(g('#pH')) B.height = g('#pH').value === '' ? null : +g('#pH').value;
+      if(g('#pWaist')) B.waist = g('#pWaist').value === '' ? null : +g('#pWaist').value;
+      if(g('#pAct')) B.activity = g('#pAct').value;
+      const vv = B.vitals || (B.vitals = {});
+      const before = [vv.sys, vv.dia, vv.hr].join(',');
+      if(g('#pSys')) vv.sys = g('#pSys').value === '' ? null : +g('#pSys').value;
+      if(g('#pDia')) vv.dia = g('#pDia').value === '' ? null : +g('#pDia').value;
+      if(g('#pHr'))  vv.hr  = g('#pHr').value  === '' ? null : +g('#pHr').value;
+      if([vv.sys, vv.dia, vv.hr].join(',') !== before) vv.at = todayStr();
     };
-    ['#pBirth','#pW','#pH'].forEach(x => { const e = $(x); if(e) e.onchange = () => { sync(); draw(); }; });
+    const bd = $('#pBirth');
+    if(bd) bd.onchange = () => { sync(); refreshDateField('pBirth'); refreshDerived(); };
+    ['#pW','#pH','#pWaist','#pSys','#pDia','#pHr'].forEach(x => {
+      const e = $(x); if(e) e.oninput = () => { sync(); refreshDerived(); };
+    });
+    const ac = $('#pAct'); if(ac) ac.onchange = () => { sync(); draw(); };
     $$('#pBody [data-clr]').forEach(b => b.onclick = e => {
       e.preventDefault(); e.stopPropagation();
-      sync(); B.birth = null; draw();
+      const inp = $('#pBirth'); if(inp) inp.value = '';
+      B.birth = null; refreshDateField('pBirth'); refreshDerived();
     });
     $$('#pEmo button').forEach(b => b.onclick = () => { sync(); P.emoji = b.dataset.e; draw(); });
     $$('#pSex button').forEach(b => b.onclick = () => { sync(); B.sex = b.dataset.v; if(b.dataset.v !== 'f') B.pregnant = false; draw(); });
@@ -3811,6 +3984,10 @@ function profileSheet(){
     if(!n){ toast('ใส่ชื่อก่อน'); return; }
     if(B.weight !== null && (B.weight < 1 || B.weight > 400)){ toast('น้ำหนักดูไม่ถูกต้อง'); return; }
     if(B.height !== null && (B.height < 30 || B.height > 260)){ toast('ส่วนสูงดูไม่ถูกต้อง'); return; }
+    if(B.waist !== null && (B.waist < 30 || B.waist > 200)){ toast(Lx('เส้นรอบเอวดูไม่ถูกต้อง','That waist measurement does not look right')); return; }
+    const V2 = B.vitals || {};
+    if(V2.sys !== null && V2.dia !== null && V2.sys && V2.dia && V2.sys <= V2.dia){
+      toast(Lx('ความดันตัวบนต้องมากกว่าตัวล่าง','The upper number must be higher than the lower one')); return; }
     P.name = n; save(); closeSheet(); paintTop(); renderSettings(); renderToday(); toast('บันทึกแล้ว');
   };
   const del = $('#pDel');
@@ -4607,7 +4784,11 @@ const DICT = {
 'ลบข้อมูลทั้งหมดในเครื่องนี้':'Erase all data on this device','ข้อจำกัดที่ควรรู้':'What this app cannot do',
 'กำลังใช้อยู่':'in use','แก้ไขโปรไฟล์':'Edit profile','เลือกผู้ใช้':'Choose a profile','เปลี่ยนผู้ใช้':'Switch profile',
 'ลบโปรไฟล์นี้':'Delete this profile','ชื่อ':'Name','เพศ':'Sex','หญิง':'Female','ชาย':'Male','ไม่ระบุ':'Prefer not to say',
-'วันเกิด':'Date of birth','น้ำหนัก (กิโลกรัม)':'Weight (kg)','ส่วนสูง (เซนติเมตร)':'Height (cm)','ข้อมูลร่างกาย':'Body details',
+'วันเกิด':'Date of birth','น้ำหนัก (กิโลกรัม)':'Weight (kg)','ส่วนสูง (เซนติเมตร)':'Height (cm)','ข้อมูลร่างกาย':'Body details','เส้นรอบเอว (เซนติเมตร)':'Waist (cm)','ระดับกิจกรรม':'Activity level',
+'สัญญาณชีพ':'Vital signs','กรอกค่าที่วัดได้ล่าสุด ระบบจะบอกว่าอยู่ในเกณฑ์ไหน':'Enter your latest readings and the app will tell you where they sit',
+'ตัวบน':'Systolic','ตัวล่าง':'Diastolic','ชีพจร':'Pulse','ยังไม่ได้กรอก':'Not entered yet',
+'วัดรอบเอวที่ระดับสะดือ หายใจออกตามปกติ ไม่แขม่วท้อง':'Measure at navel level, breathing out normally, without pulling in',
+'นั่งพัก 5 นาทีก่อนวัด และวัดซ้ำอีกครั้งห่างกัน 1 ถึง 2 นาที':'Sit quietly for 5 minutes first, then take a second reading 1 to 2 minutes later',
 'ใช้ปรับขีดสูงสุดของยาบางชนิดให้ตรงกับตัวคุณ เช่น พาราเซตามอลคิดตามน้ำหนัก กรอกเท่าที่สะดวก':
  'Used to tailor the maximum dose of some medicines to you — paracetamol is weight-based, for example. Fill in whatever you are comfortable sharing.',
 'ยังไม่ได้กรอกข้อมูลร่างกาย':'body details not filled in',
@@ -4943,9 +5124,11 @@ function migrate(){
     if(p.settings.nag === true) p.settings.nag = 10;
     if(p.settings.nag === false) p.settings.nag = 0;
     p.settings.nag = +p.settings.nag || 0;
-    p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[]}, p.body || {});
+    p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light', vitals:{sys:null,dia:null,hr:null,at:null}}, p.body || {});
     if(!Array.isArray(p.body.conditions)) p.body.conditions = [];
     if(!Array.isArray(p.body.allergies)) p.body.allergies = [];
+    p.body.vitals = Object.assign({sys:null,dia:null,hr:null,at:null}, p.body.vitals || {});
+    if(!p.body.activity) p.body.activity = 'light';
     p.logs = p.logs || {}; p.notified = p.notified || {}; p.snoozes = p.snoozes || {}; p.meds = p.meds || [];
     p.meds.forEach(m => {
       m.freq = m.freq || {mode:'daily'};
@@ -4992,7 +5175,7 @@ function boot(){
 loadData().then(boot).catch(dataError);
 
 /* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
-const APP_VERSION = '21';
+const APP_VERSION = '22';
 let swReg = null, updWaiting = null, updReloading = false;
 function showUpdateBar(w){
   updWaiting = w;
