@@ -410,6 +410,24 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 .drow .dl{flex:1;font-size:13.5px;color:var(--ink-2)}
 .drow .dv{font-size:15.5px;font-weight:700;font-variant-numeric:tabular-nums}
 .dn{font-size:12px;color:var(--ink-3);line-height:1.55;margin:0 0 6px}
+.dlnav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.dlnav span{flex:1;text-align:center;line-height:1.3}
+.dlnav span b{display:block;font-size:15.5px;font-weight:660}
+.dlnav span i{font-style:normal;font-size:11.5px;color:var(--accent);font-weight:660}
+.scalerow{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.scalerow button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 2px;
+  border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink-2)}
+.scalerow button i{font-style:normal;font-size:19px;line-height:1}
+.scalerow button span{font-size:10px;line-height:1.2;text-align:center}
+.scalerow button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+html[data-dark="1"] .scalerow button.on{color:#0E1419}
+.macbar{display:flex;height:8px;border-radius:6px;overflow:hidden;background:var(--line-2);margin:8px 0}
+.macbar i{display:block;height:100%}
+.mealrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-2)}
+.mealrow:last-of-type{border-bottom:0}
+.mealrow .bd{flex:1;min-width:0}
+.mealrow .nm{display:block;font-size:14px;font-weight:620}
+.mealrow .tt{display:block;font-size:12px;color:var(--ink-3);margin-top:1px}
 .numrow{display:flex;gap:8px}
 .numrow input{flex:1;min-width:0}
 .numrow select{width:auto;flex:none;max-width:52%}
@@ -479,6 +497,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
     <div id="tdDose"></div>
     <div id="tdStock"></div>
     <div id="tdWater"></div>
+    <div id="tdDaily"></div>
     <div id="tdBackup"></div>
     <div class="rail" id="rail"></div>
   </section>
@@ -563,6 +582,11 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
     <h2 class="vt">โรคประจำตัวและยาของคุณ</h2>
     <p class="vs">ระบุโรคที่เป็นอยู่ แล้วระบบจะตรวจให้ว่ายาที่กินอยู่มีตัวไหนต้องระวัง</p>
     <div class="card">
+      <h3>บันทึกประจำวัน</h3>
+      <p class="h" id="dlSummary">น้ำหนัก ความดัน และชีพจร บันทึกย้อนหลังได้</p>
+      <button class="btn ghost full sm" id="dlOpen">เปิดบันทึกประจำวัน</button>
+    </div>
+    <div class="card">
       <h3>ยาที่แพ้</h3>
       <p class="h">ระบบจะเตือนทันทีถ้ามีรายการยาที่ตรงกัน</p>
       <div class="tagpick" id="allergyChips" style="margin-bottom:12px"></div>
@@ -599,6 +623,14 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
           <button data-v="slash">20/09/2026</button>
           <button data-v="iso">2026-09-20</button>
         </div>
+      </div>
+      <div class="fld" style="margin:14px 0 0">
+        <label class="fl">หน่วยวัด</label>
+        <div class="seg" id="unitSeg">
+          <button data-v="metric">กิโลกรัม เซนติเมตร</button>
+          <button data-v="imperial">ปอนด์ ฟุตนิ้ว</button>
+        </div>
+        <p class="src" style="margin-top:8px">ใช้กับน้ำหนัก ส่วนสูง และเส้นรอบเอว ส่วนขนาดยายังเป็นมิลลิกรัมและมิลลิลิตรเสมอ เพราะเป็นหน่วยสากลของยา</p>
       </div>
     </div>
 
@@ -721,6 +753,14 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
       </div>
       <div class="row">
         <div class="g"><b>สำรองข้อมูลล่าสุด</b><span id="lastBackup">ยังไม่เคยสำรอง</span></div>
+      </div>
+      <div class="row">
+        <div class="g"><b>บันทึกประจำวัน</b><span id="dailyState">เก็บน้ำหนัก ความดัน ชีพจร และการเคลื่อนไหวรายวัน</span></div>
+        <button class="sw" id="dailyOn"></button>
+      </div>
+      <div class="row">
+        <div class="g"><b>ขนาดบันทึกประจำวัน</b><span id="dailySize">—</span></div>
+        <button class="btn sm ghost" id="dailyPrune">เก็บกวาด</button>
       </div>
       <div class="row">
         <div class="g"><b>เวอร์ชันของแอป</b><span id="appVer">—</span></div>
@@ -1229,8 +1269,8 @@ function limitFor(tag){
     if(g && !g.noWeight){
       if(g.dayHi < out.max){
         out.max = g.dayHi;
-        out.why = 'ปรับตามน้ำหนัก ' + w + ' กก.';
-        out.whyEn = 'Adjusted for a body weight of ' + w + ' kg';
+        out.why = 'ปรับตามน้ำหนัก ' + showMass(w);
+        out.whyEn = 'Adjusted for a body weight of ' + showMass(w);
       }
       out.perDose = g.perHi; out.tabs = g.eqHi.tabs; out.tabMg = g.D.tab;
     }
@@ -1304,31 +1344,39 @@ function renderWater(){
   const host = $('#tdWater'); if(!host) return;
   const ds = todayStr();
   const doses = dosesFor(ds).filter(x => x.med.type === 'water');
-  if(!doses.length){ host.innerHTML = ''; return; }
+  const fromMeals = mealTotals(ds).ml;
+  if(!doses.length && !fromMeals){ host.innerHTML = ''; return; }
+
   const ml = x => {
     const st = +x.med.strength || 0, per = +x.med.perDose || 1;
     if(!st) return 0;
     return x.med.strengthUnit === 'mL' ? st * per : 0;
   };
-  const total = doses.reduce((n,x) => n + ml(x), 0);
-  const done = doses.filter(x => x.status === 'taken').reduce((n,x) => n + ml(x), 0);
-  const pct = total ? Math.round(done / total * 100) : 0;
+  const scheduled = doses.reduce((n,x) => n + ml(x), 0);
+  const drunk = doses.filter(x => x.status === 'taken').reduce((n,x) => n + ml(x), 0) + fromMeals;
   const w = P.body && P.body.weight;
-  const tgt = w ? Math.round(w * 32 / 50) * 50 : null;
+  const need = w ? Math.round(w * 32 / 50) * 50 : null;   /* ราว 32 มล. ต่อน้ำหนัก 1 กก. */
+  const target = scheduled || need || null;
+  const pct = target ? Math.round(drunk / target * 100) : null;
+
   host.innerHTML = '<div class="card" style="box-shadow:none;background:var(--card-2);margin-bottom:18px">'+
     '<div style="display:flex;align-items:center;gap:11px;margin-bottom:9px">'+
       '<span class="pill" style="background:color-mix(in srgb,#2A9DE0 16%,transparent)">💧</span>'+
       '<span style="flex:1"><b style="font-size:15px">' + Lx('น้ำดื่มวันนี้','Water today') + '</b><br>'+
       '<span style="font-size:12.5px;color:var(--ink-3)">' +
-        (total ? Lx('ดื่มแล้ว ','') + fmtAmt(done,'mL') + Lx(' จาก ',' of ') + fmtAmt(total,'mL')
-               : Lx('ยังไม่ได้กรอกปริมาณต่อแก้ว','No volume set per serving')) + '</span></span>'+
-      '<b class="num" style="font-size:17px;color:#2A9DE0">' + pct + '%</b></div>'+
-    '<div class="bar"><i style="width:' + Math.min(100,pct) + '%;background:#2A9DE0"></i></div>'+
-    (tgt ? '<p style="font-size:12px;color:var(--ink-3);margin:9px 0 0;line-height:1.5">' +
-      Lx('น้ำหนัก ' + w + ' กก. ต้องการน้ำราว ','At ' + w + ' kg you need about ') + fmtAmt(tgt,'mL') +
-      Lx(' ต่อวัน ตารางที่ตั้งไว้คิดเป็น ',' a day — your schedule covers ') + Math.round(total / tgt * 100) + '%' +
-      Lx('','') + '</p>' : '')+
-    '</div>';
+        (target ? Lx('ดื่มแล้ว ','') + fmtAmt(drunk,'mL') + Lx(' จาก ',' of ') + fmtAmt(target,'mL')
+                : Lx('ดื่มแล้ว ','') + fmtAmt(drunk,'mL')) + '</span></span>'+
+      (pct !== null ? '<b class="num" style="font-size:17px;color:#2A9DE0">' + pct + '%</b>' : '') + '</div>'+
+    (pct !== null ? '<div class="bar"><i style="width:' + Math.min(100,pct) + '%;background:#2A9DE0"></i></div>' : '')+
+    '<p style="font-size:12px;color:var(--ink-3);margin:9px 0 0;line-height:1.5">' +
+      (scheduled ? Lx('เป้าหมายมาจากรายการน้ำดื่มที่ตั้งเวลาไว้','Target comes from the water items you scheduled')
+                 : need ? Lx('เป้าหมายประมาณจากน้ำหนัก ' + showMass(w) + ' ที่ราว 32 มล. ต่อกิโลกรัม',
+                             'Target estimated from a body weight of ' + showMass(w) + ' at about 32 mL per kg')
+                        : Lx('กรอกน้ำหนักในโปรไฟล์ แล้วระบบจะประมาณเป้าหมายให้',
+                             'Add your weight in the profile and a target will be estimated'))+
+      (fromMeals ? '<br>' + Lx('รวมเครื่องดื่มที่บันทึกไว้ในบันทึกประจำวัน ','Includes ') + fmtAmt(fromMeals,'mL') +
+                   Lx('',' logged in the daily log') : '')+
+    '</p></div>';
 }
 
 /* ---- ยาที่ใกล้หมด ---- */
@@ -1437,8 +1485,8 @@ function limitBlock(tags){
   if(B.sex === 'f') who.push(Lx('หญิง','female'));
   if(B.sex === 'm') who.push(Lx('ชาย','male'));
   if(B.pregnant) who.push(Lx('ตั้งครรภ์','pregnant'));
-  if(B.weight) who.push(B.weight + Lx(' กก.',' kg'));
-  if(B.height) who.push(B.height + Lx(' ซม.',' cm'));
+  if(B.weight) who.push(showMass(B.weight));
+  if(B.height) who.push(showLen(B.height));
 
   const num = v => v.toLocaleString(LANG === 'en' ? 'en-US' : 'th-TH');
   const rng = (lo, hi, u) => lo === hi ? fmtAmt(hi, u) : num(lo) + '–' + fmtAmt(hi, u);
@@ -1583,9 +1631,9 @@ function newProfile(name, emoji){
   return {
     id:uid(), name:name, emoji:emoji||'🧑',
     pin:null, salt:null,
-    body:{sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light', vitals:{sys:null,dia:null,hr:null,at:null}},
-    settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:10, autoLock:5, lang:'th', dateFmt:'dmy' },
-    meds:[], logs:{}, notified:{}, snoozes:{}
+    body:{sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light'},
+    settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:10, autoLock:5, lang:'th', dateFmt:'dmy', daily:1, units:'metric' },
+    meds:[], logs:{}, notified:{}, snoozes:{}, daily:{}
   };
 }
 
@@ -1615,7 +1663,7 @@ function makeSalt(){
 /* ================================================================
    เข้ารหัสข้อมูล และคำถามกู้รหัส PIN
    ================================================================ */
-const VAULT_FIELDS = ['meds','logs','notified','snoozes','body'];
+const VAULT_FIELDS = ['meds','logs','notified','snoozes','body','daily'];
 let DEK = null;          /* กุญแจข้อมูลของโปรไฟล์ที่ปลดล็อกอยู่ */
 let lastPin = null;      /* รหัสที่เพิ่งใส่ ใช้ห่อกุญแจใหม่ตอนเปลี่ยนรหัส */
 
@@ -1995,6 +2043,12 @@ function conditionPicker(back){
 function renderHealth(){
   const conds = myConditions();
   const host = $('#healthBody'); if(!host) return;
+  const st = dailyStats();
+  const ds = $('#dlSummary');
+  if(ds) ds.textContent = st.days
+    ? Lx('บันทึกไว้แล้ว ' + st.days + ' วัน เริ่มตั้งแต่ ' + fmtDate(st.oldest),
+         st.days + ' days recorded, starting ' + fmtDate(st.oldest))
+    : Lx('น้ำหนัก ความดัน และชีพจร บันทึกย้อนหลังได้','Weight, blood pressure and pulse — you can fill in past days too');
   const al = myAllergies();
   $('#allergyChips').innerHTML = al.length
     ? al.map(a => '<button class="on" style="background:var(--danger);border-color:var(--danger)">⚠️ ' + esc(a.label) + '</button>').join('')
@@ -2155,6 +2209,41 @@ function allergyChecks(){
 }
 
 
+
+/* ================================================================
+   ระบบหน่วยวัด — เก็บเป็นเมตริกเสมอ แปลงเฉพาะตอนแสดงและตอนรับค่า
+   ยาและปริมาตรยาไม่แปลง เพราะ มก. มคก. และ มล. เป็นหน่วยสากลของยาอยู่แล้ว
+   ================================================================ */
+const LB_PER_KG = 2.2046226218;
+const CM_PER_IN = 2.54;
+function unitSys(){ return (P && P.settings && P.settings.units) || 'metric'; }
+function isImperial(){ return unitSys() === 'imperial'; }
+function wUnit(){ return isImperial() ? Lx('ปอนด์','lb') : Lx('กก.','kg'); }
+function lUnit(){ return isImperial() ? Lx('นิ้ว','in') : Lx('ซม.','cm'); }
+function kgToDisp(kg){ return kg == null ? null : Math.round((isImperial() ? kg * LB_PER_KG : kg) * 10) / 10; }
+function dispToKg(v){ return v == null ? null : (isImperial() ? Math.round(v / LB_PER_KG * 100) / 100 : v); }
+function cmToDisp(cm){ return cm == null ? null : Math.round((isImperial() ? cm / CM_PER_IN : cm) * 10) / 10; }
+function dispToCm(v){ return v == null ? null : (isImperial() ? Math.round(v * CM_PER_IN * 10) / 10 : v); }
+function convToDisp(kind, v){ return kind === 'mass' ? kgToDisp(v) : kind === 'len' ? cmToDisp(v) : v; }
+function convFromDisp(kind, v){ return kind === 'mass' ? dispToKg(v) : kind === 'len' ? dispToCm(v) : v; }
+function convUnitLabel(kind){ return kind === 'mass' ? wUnit() : kind === 'len' ? lUnit() : ''; }
+/* แสดงน้ำหนักและความยาวพร้อมหน่วย */
+function showMass(kg){ return kg == null ? '—' : kgToDisp(kg) + ' ' + wUnit(); }
+function showLen(cm){ return cm == null ? '—' : cmToDisp(cm) + ' ' + lUnit(); }
+/* ส่วนสูงแบบอิมพีเรียลนิยมบอกเป็นฟุตและนิ้ว */
+function cmToFtIn(cm){
+  if(cm == null) return {ft:null, inch:null};
+  const total = cm / CM_PER_IN;
+  let ft = Math.floor(total / 12), inch = Math.round((total - ft * 12) * 10) / 10;
+  if(inch >= 12){ ft += 1; inch = 0; }
+  return {ft:ft, inch:inch};
+}
+function ftInToCm(ft, inch){
+  const f = +ft || 0, i = +inch || 0;
+  if(!f && !i) return null;
+  return Math.round((f * 12 + i) * CM_PER_IN * 10) / 10;
+}
+
 /* ================================================================
    สัญญาณชีพ และค่าที่คำนวณได้จากข้อมูลร่างกาย
    ================================================================ */
@@ -2222,7 +2311,7 @@ function fmtNum(n){ return Number(n).toLocaleString(LANG === 'en' ? 'en-US' : 't
 function derivedBlock(){
   const b = (P && P.body) || {};
   const a = ageOf(), bmi = bmiOf(), whtr = whtrOf(), bmr = bmrOf(), tdee = tdeeOf();
-  const v = b.vitals || {};
+  const v = latestVitals();
   const bp = bpClass(v.sys, v.dia), hr = hrClass(v.hr);
   const row = (label, value, cls, note) =>
     '<div class="drow"><span class="dl">' + label + '</span>'+
@@ -2242,12 +2331,14 @@ function derivedBlock(){
   if(bmi !== null) h += row(Lx('ดัชนีมวลกาย BMI','Body mass index'), bmi.toFixed(1), bmiClass(bmi),
       Lx('เกณฑ์ผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก','WHO Asian adult cut-offs'));
   if(whtr !== null) h += row(Lx('เอวต่อส่วนสูง WHtR','Waist-to-height ratio'), whtr.toFixed(2), whtrClass(whtr),
-      Lx('ควรต่ำกว่า 0.5 คือรอบเอวไม่เกินครึ่งหนึ่งของส่วนสูง','Aim under 0.5 — keep your waist under half your height'));
+      Lx('ควรต่ำกว่า 0.5 คือรอบเอวไม่เกินครึ่งหนึ่งของส่วนสูง','Aim under 0.5 — keep your waist under half your height') +
+      ' · ' + showLen(b.waist) + Lx(' ต่อ ',' of ') + showLen(b.height));
   if(bmr !== null) h += row(Lx('พลังงานขั้นต่ำ BMR','Basal metabolic rate'), fmtNum(bmr) + Lx(' กิโลแคลอรีต่อวัน',' kcal a day'), null,
       Lx('พลังงานที่ร่างกายใช้ตอนพักเฉย ๆ ทั้งวัน คำนวณด้วยสูตร Mifflin-St Jeor','What your body burns at complete rest, using the Mifflin-St Jeor equation'));
   if(tdee !== null) h += row(Lx('พลังงานที่ใช้จริง TDEE','Total daily energy'), fmtNum(tdee) + Lx(' กิโลแคลอรีต่อวัน',' kcal a day'), null,
       Lx('รวมกิจกรรมระดับ ','Includes activity level ') + esc(L2(activityOf())) + Lx(' แล้ว',''));
-  if(bp) h += row(Lx('ความดันโลหิต','Blood pressure'), v.sys + '/' + v.dia + Lx(' มม.ปรอท',' mmHg'), bp,
+  if(bp) h += row(Lx('ความดันโลหิต','Blood pressure'), v.sys + '/' + v.dia + Lx(' มม.ปรอท',' mmHg') +
+      (v.at && v.at !== todayStr() ? ' <span style="font-size:11.5px;font-weight:400;color:var(--ink-3)">' + esc(fmtDate(v.at)) + '</span>' : ''), bp,
       bp.k === 'high' ? Lx('ค่าครั้งเดียวยังไม่ใช่การวินิจฉัย ต้องวัดซ้ำหลายวันและให้แพทย์ประเมิน',
                            'A single reading is not a diagnosis — repeat over several days and let a doctor assess it') : '');
   if(hr) h += row(Lx('ชีพจรขณะพัก','Resting heart rate'), v.hr + Lx(' ครั้งต่อนาที',' bpm'), hr, '');
@@ -2267,6 +2358,473 @@ function refreshDerived(){
   const ag = $('#pAgeLine');
   if(ag){ const a = ageOf(); ag.textContent = a === null ? '' : Lx('อายุ ' + a + ' ปี', 'Age ' + a); }
 }
+
+
+/* ================================================================
+   บันทึกประจำวัน — โครงกลางสำหรับทุกอย่างที่บันทึกเป็นรายวัน
+   เพิ่มรายการใหม่ได้โดยเติมลง DAILY_GROUPS และ DAILY_FIELDS เท่านั้น
+   ================================================================ */
+const DAILY_GROUPS = [
+  {id:'body',   ic:'⚖️', th:'น้ำหนักและรอบเอว', en:'Weight and waist'},
+  {id:'vitals', ic:'🩺', th:'สัญญาณชีพ',        en:'Vital signs'},
+  {id:'food',   ic:'🍽️', custom:'food', th:'อาหารและโภชนาการ', en:'Food and nutrition'},
+  {id:'sleep',  ic:'😴', th:'การนอนหลับ',       en:'Sleep'},
+  {id:'move',   ic:'🚶', th:'การเคลื่อนไหว',     en:'Movement'},
+  {id:'note',   ic:'📝', th:'บันทึกของวันนี้',   en:"Today's note"}
+];
+const DAILY_FIELDS = [
+  {g:'body', id:'weight', type:'num', conv:'mass', th:'น้ำหนัก',    en:'Weight',   min:1,  max:400, step:0.1, ph:'62'},
+  {g:'body', id:'waist',  type:'num', conv:'len',  th:'เส้นรอบเอว', en:'Waist',    min:30, max:200, step:0.5, ph:'80'},
+  {g:'vitals', id:'sys',  type:'num', th:'ความดันตัวบน', en:'Systolic', uth:'มม.ปรอท',    uen:'mmHg', min:50, max:260, step:1,   ph:'120'},
+  {g:'vitals', id:'dia',  type:'num', th:'ความดันตัวล่าง',en:'Diastolic',uth:'มม.ปรอท',   uen:'mmHg', min:30, max:160, step:1,   ph:'80'},
+  {g:'vitals', id:'hr',   type:'num', th:'ชีพจรขณะพัก',  en:'Resting pulse', uth:'ครั้งต่อนาที', uen:'bpm', min:25, max:220, step:1, ph:'72'},
+  {g:'sleep', id:'bed',    type:'time',  th:'เข้านอน',           en:'Went to bed'},
+  {g:'sleep', id:'wake',   type:'time',  th:'ตื่นนอน',           en:'Woke up'},
+  {g:'sleep', id:'sleepQ', type:'scale', th:'คุณภาพการนอน',      en:'Sleep quality', opts:'SLEEP_Q'},
+  {g:'sleep', id:'wakeups',type:'num',   th:'ตื่นกลางดึกกี่ครั้ง', en:'Times woken', uth:'ครั้ง', uen:'times', min:0, max:20, step:1, ph:'0'},
+  {g:'move', id:'steps',     type:'num', th:'จำนวนก้าว',        en:'Steps',          uth:'ก้าว',   uen:'steps', min:0, max:200000, step:100, ph:'6000'},
+  {g:'move', id:'activeMin',  type:'num', th:'เวลาที่ขยับร่างกาย', en:'Active minutes', uth:'นาที',   uen:'min',   min:0, max:1440,   step:5,   ph:'30'},
+  {g:'move', id:'activeKcal', type:'num', th:'แคลอรีจากกิจกรรม',  en:'Active calories',uth:'กิโลแคลอรี', uen:'kcal', min:0, max:10000, step:10, ph:'250'},
+  {g:'note', id:'note', type:'text', th:'บันทึกเพิ่มเติม', en:'Note',
+   ph:'เช่น วันนี้เวียนหัวตอนเช้า หรือ ลืมกินยามื้อเที่ยง'}
+];
+function dailyFieldsOf(gid){ return DAILY_FIELDS.filter(f => f.g === gid); }
+/* วาดช่องกรอกจากทะเบียน จัดกลุ่มช่องตัวเลขและเวลาให้อยู่แถวเดียวกัน */
+function dailyRows(fs, d){
+  let out = '', buf = [];
+  const flush = () => {
+    if(!buf.length) return;
+    out += (buf.length > 1 ? '<div class="' + (buf.length >= 3 ? 'three' : 'two') + '">' : '') +
+           buf.join('') + (buf.length > 1 ? '</div>' : '');
+    buf = [];
+  };
+  fs.forEach(f => {
+    if(f.type === 'num'){
+      buf.push('<div><label class="fl">' + esc(dailyLabel(f)) +
+        (dailyUnit(f) ? ' <span style="font-weight:400;color:var(--ink-3)">' + esc(dailyUnit(f)) + '</span>' : '') + '</label>'+
+        '<input type="number" id="dl_' + f.id + '" min="' + convToDisp(f.conv, f.min) + '" max="' + convToDisp(f.conv, f.max) +
+        '" step="' + f.step + '" placeholder="' + esc(f.conv ? String(convToDisp(f.conv, +f.ph)) : f.ph) +
+        '" value="' + (d[f.id] == null ? '' : convToDisp(f.conv, d[f.id])) + '"></div>');
+    } else if(f.type === 'time'){
+      buf.push('<div><label class="fl">' + esc(dailyLabel(f)) + '</label>'+
+        '<input type="time" id="dl_' + f.id + '" value="' + esc(d[f.id] || '') + '" style="text-align:center"></div>');
+    } else if(f.type === 'scale'){
+      flush();
+      const opts = (DAILY_OPTS[f.opts] || []);
+      out += '<div class="fld" style="margin:0 0 4px"><label class="fl">' + esc(dailyLabel(f)) + '</label>'+
+        '<div class="scalerow" id="dl_' + f.id + '">' + opts.map(o =>
+          '<button data-v="' + o.v + '"' + (d[f.id] === o.v ? ' class="on"' : '') + '>'+
+          '<i>' + o.ic + '</i><span>' + esc(L2(o)) + '</span></button>').join('') + '</div></div>';
+    } else if(f.type === 'text'){
+      flush();
+      out += '<div class="fld" style="margin:0"><textarea id="dl_' + f.id + '" rows="2" placeholder="' + esc(f.ph) + '">' + esc(d[f.id] || '') + '</textarea></div>';
+    }
+  });
+  flush();
+  return out;
+}
+function dailyLabel(f){ return LANG === 'en' ? f.en : f.th; }
+function dailyUnit(f){ return f.conv ? convUnitLabel(f.conv) : (LANG === 'en' ? (f.uen || '') : (f.uth || '')); }
+/* รวมค่าย้อนหลัง n วันนับจากวันนี้ ใช้กับสรุปรายสัปดาห์ */
+function sumDaily(key, days){
+  let total = 0, n = 0;
+  for(let i = 0; i < days; i++){
+    const t = new Date(); t.setDate(t.getDate() - i);
+    const d = dayLog(todayStr(t));
+    if(d && typeof d[key] === 'number'){ total += d[key]; n++; }
+  }
+  return {total:total, days:n};
+}
+
+function dayLog(ds){ return (P.daily && P.daily[ds]) || null; }
+function dayHas(ds){
+  const d = dayLog(ds);
+  if(!d) return false;
+  return Object.keys(d).some(k => d[k] !== null && d[k] !== undefined && d[k] !== '');
+}
+function setDayValue(ds, key, val){
+  P.daily = P.daily || {};
+  const d = P.daily[ds] || (P.daily[ds] = {});
+  if(val === null || val === undefined || val === '') delete d[key]; else d[key] = val;
+  if(!Object.keys(d).length) delete P.daily[ds];
+  save();
+}
+/* ค่าล่าสุดของรายการหนึ่ง ย้อนหาไม่เกิน 400 วัน */
+function latestDaily(key){
+  if(!P.daily) return null;
+  const keys = Object.keys(P.daily).filter(k => P.daily[k][key] !== undefined && P.daily[k][key] !== null && P.daily[k][key] !== '');
+  if(!keys.length) return null;
+  keys.sort();
+  const ds = keys[keys.length - 1];
+  return {date:ds, value:P.daily[ds][key]};
+}
+function latestVitals(){
+  const s = latestDaily('sys'), d = latestDaily('dia'), h = latestDaily('hr');
+  return { sys:s ? s.value : null, dia:d ? d.value : null, hr:h ? h.value : null,
+           at:(s || d || h) ? [s,d,h].filter(Boolean).map(x => x.date).sort().pop() : null };
+}
+/* ขนาดข้อมูลและการเก็บกวาด */
+function dailyStats(){
+  const keys = Object.keys(P.daily || {});
+  const bytes = keys.length ? new Blob([JSON.stringify(P.daily)]).size : 0;
+  return {days:keys.length, bytes:bytes, oldest:keys.length ? keys.sort()[0] : null};
+}
+const DAILY_KEEP_DAYS = 400;
+function pruneDaily(){
+  if(!P.daily) return 0;
+  const cut = new Date(); cut.setDate(cut.getDate() - DAILY_KEEP_DAYS);
+  const c = todayStr(cut);
+  let n = 0;
+  Object.keys(P.daily).forEach(k => {
+    if(k < c || !Object.keys(P.daily[k]).length){ delete P.daily[k]; n++; }
+  });
+  return n;
+}
+
+/* ---- หน้าจอบันทึกประจำวัน ---- */
+let dailyDate = null;
+function dailySheet(ds, back){
+  dailyDate = ds || todayStr();
+  const draw = () => {
+    const d = dayLog(dailyDate) || {};
+    const isToday = dailyDate === todayStr();
+    const atEnd = dailyDate >= todayStr();   /* วันนี้คือวันสุดท้ายที่บันทึกได้ */
+    $('#dlBody').innerHTML =
+      '<div class="dlnav">'+
+        '<button class="iconbtn" data-nav="-1"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>'+
+        '<span><b>' + esc(thDate(parseDate(dailyDate))) + '</b>'+
+        (isToday ? '<i>' + Lx('วันนี้','Today') + '</i>' : '') + '</span>'+
+        '<button class="iconbtn" data-nav="1"' + (atEnd ? ' disabled style="opacity:.3"' : '') + '><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>'+
+      '</div>'+
+      (isToday ? '' : '<button class="btn ghost sm full" data-nav="0" style="margin-bottom:14px">' + Lx('กลับมาที่วันนี้','Back to today') + '</button>')+
+      DAILY_GROUPS.map(g => {
+        if(g.custom === 'food') return foodSection(dailyDate);
+        const fs = dailyFieldsOf(g.id);
+        if(!fs.length) return '';
+        return '<div class="card" style="box-shadow:none"><h3>' + g.ic + ' ' + esc(L2(g)) + '</h3>'+
+          dailyRows(fs, d)+
+          (g.id === 'vitals' ? '<div id="dlBp"></div>' : '')+
+          (g.id === 'body' ? '<div id="dlBody2"></div>' : '')+
+          (g.id === 'sleep' ? '<div id="dlSleep"></div>'+
+            '<p class="dn" style="margin-top:8px">' +
+            Lx('ระยะการนอนแบบละเอียด เช่น หลับลึกหรือหลับตื้น ต้องใช้อุปกรณ์สวมใส่วัด เว็บทำเองไม่ได้ จึงให้ให้คะแนนความรู้สึกตอนตื่นแทน',
+               'Detailed sleep stages need a wearable to measure. A web app cannot do it, so rate how you felt on waking instead.') + '</p>' : '')+
+          (g.id === 'move' ? '<div id="dlMove"></div>'+
+            '<p class="dn" style="margin-top:8px">' +
+            Lx('เว็บอ่านค่าจากนาฬิกาหรือแอปสุขภาพของเครื่องไม่ได้ ต้องดูตัวเลขจากที่นั่นแล้วมากรอกเอง',
+               'A web app cannot read from your watch or the phone health app — check the numbers there and enter them here') + '</p>' : '')+
+          '</div>';
+      }).join('')+
+      '<p class="dn" style="margin-top:4px">' +
+      Lx('บันทึกอัตโนมัติทันทีที่พิมพ์ ไม่ต้องกดบันทึก เว้นว่างไว้ได้ถ้าวันนั้นไม่ได้วัด',
+         'Saved automatically as you type. Leave anything blank if you did not measure it that day.') + '</p>';
+
+    DAILY_FIELDS.forEach(f => {
+      const el = $('#dl_' + f.id); if(!el) return;
+      if(f.type === 'scale'){
+        $$('#dl_' + f.id + ' [data-v]').forEach(b => b.onclick = () => {
+          const cur = (dayLog(dailyDate) || {})[f.id];
+          setDayValue(dailyDate, f.id, cur === +b.dataset.v ? null : +b.dataset.v);
+          draw();
+        });
+        return;
+      }
+      if(f.type === 'time'){
+        el.onchange = () => {
+          setDayValue(dailyDate, f.id, el.value || null);
+          refreshDailyHints();
+          if(VIEW === 'today') renderDailyCard();
+        };
+        return;
+      }
+      el.oninput = () => {
+        let v = el.value;
+        if(f.type === 'num'){
+          v = v === '' ? null : convFromDisp(f.conv, +v);
+          if(v !== null && (v < f.min || v > f.max)) return;
+        } else { v = v.trim(); }
+        setDayValue(dailyDate, f.id, v);
+        if(dailyDate === todayStr() && v !== null && (f.id === 'weight' || f.id === 'waist')){
+          P.body[f.id] = v; save();
+        }
+        refreshDailyHints();
+        if(VIEW === 'today') renderDailyCard();
+      };
+    });
+    const fa = $('#fpAdd');
+    if(fa) fa.onclick = () => foodPicker(dailyDate, () => dailySheet(dailyDate));
+    $$('#dlBody [data-mdel]').forEach(b => b.onclick = () => {
+      removeMeal(dailyDate, +b.dataset.mdel);
+      draw();
+      if(VIEW === 'today') renderToday();
+    });
+    $$('#dlBody [data-nav]').forEach(b => b.onclick = () => {
+      const n = +b.dataset.nav;
+      if(n === 0){ dailyDate = todayStr(); }
+      else {
+        const t = parseDate(dailyDate); t.setDate(t.getDate() + n);
+        const next = todayStr(t);
+        if(next > todayStr()) return;
+        dailyDate = next;
+      }
+      draw();
+    });
+    refreshDailyHints();
+  };
+  const refreshDailyHints = () => {
+    const d = dayLog(dailyDate) || {};
+    const bp = bpClass(d.sys, d.dia), hr = hrClass(d.hr);
+    const bx = $('#dlBp');
+    if(bx) bx.innerHTML = (bp || hr)
+      ? '<p class="dn" style="margin-top:10px">' +
+        (bp ? Lx('ความดัน ','BP ') + '<b>' + esc(L2(bp)) + '</b>' : '') +
+        (bp && hr ? ' · ' : '') +
+        (hr ? Lx('ชีพจร ','Pulse ') + '<b>' + esc(L2(hr)) + '</b>' : '') + '</p>'
+      : '';
+    const sl = $('#dlSleep');
+    if(sl){
+      const m = sleepMinutes(d.bed, d.wake), cls = sleepClass(m), t = sleepTarget();
+      const wk = avgSleep(7);
+      const bits = [];
+      if(m !== null) bits.push('<b>' + Lx('นอน ','Slept ') + fmtDuration(m) + '</b> · ' + esc(L2(cls)) +
+        Lx(' (แนะนำ ' + t.lo + ' ถึง ' + t.hi + ' ชั่วโมง)', ' (recommended ' + t.lo + ' to ' + t.hi + ' hours)'));
+      if(wk && wk.days > 1) bits.push(Lx('เฉลี่ย 7 วันที่ผ่านมา ','Last 7 days average ') + fmtDuration(wk.avg) +
+        Lx(' จาก ' + wk.days + ' คืนที่บันทึกไว้', ' from ' + wk.days + ' nights recorded'));
+      sl.innerHTML = bits.length ? '<p class="dn" style="margin-top:10px">' + bits.join('<br>') + '</p>' : '';
+    }
+    const mv = $('#dlMove');
+    if(mv){
+      const wk = sumDaily('activeMin', 7), st = sumDaily('steps', 7);
+      const bits = [];
+      if(wk.days) bits.push(Lx('7 วันที่ผ่านมาขยับไปแล้ว ','Last 7 days: ') + '<b>' + fmtNum(wk.total) +
+        Lx(' นาที',' active minutes') + '</b>' + Lx(' จากที่องค์การอนามัยโลกแนะนำ 150 นาทีต่อสัปดาห์',
+                                                    ' of the 150 a week the WHO suggests'));
+      if(st.days) bits.push(Lx('เฉลี่ยวันละ ','Average ') + fmtNum(Math.round(st.total / st.days)) + Lx(' ก้าว',' steps a day'));
+      mv.innerHTML = bits.length ? '<p class="dn" style="margin-top:10px">' + bits.join('<br>') + '</p>' : '';
+    }
+    const bd = $('#dlBody2');
+    if(bd){
+      const h = P.body && P.body.height;
+      const bits = [];
+      if(d.weight && h) bits.push('BMI ' + (d.weight / Math.pow(h/100,2)).toFixed(1));
+      if(d.waist && h) bits.push(Lx('เอวต่อส่วนสูง ','WHtR ') + (d.waist / h).toFixed(2));
+      bd.innerHTML = bits.length ? '<p class="dn" style="margin-top:10px">' + bits.join(' · ') + '</p>' : '';
+    }
+  };
+  openSheet('<div class="shd"><b>' + Lx('บันทึกประจำวัน','Daily log') + '</b>'+
+    '<button class="btn sm ghost" onclick="dismissSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    '<div id="dlBody"></div>', back);
+  draw();
+}
+
+/* ---- การ์ดบนหน้าวันนี้ ---- */
+function renderDailyCard(){
+  const host = $('#tdDaily'); if(!host) return;
+  if(!P.settings.daily){ host.innerHTML = ''; return; }
+  const ds = todayStr(), d = dayLog(ds) || {};
+  const bits = [];
+  if(d.weight) bits.push(showMass(d.weight));
+  if(d.steps) bits.push(fmtNum(d.steps) + Lx(' ก้าว',' steps'));
+  const sm = sleepMinutes(d.bed, d.wake);
+  if(sm !== null) bits.push(Lx('นอน ','slept ') + fmtDuration(sm));
+  const mt = mealTotals(ds);
+  if(mt.kcal) bits.push(fmtNum(mt.kcal) + Lx(' กิโลแคลอรี',' kcal'));
+  if(d.sys && d.dia) bits.push(d.sys + '/' + d.dia);
+  if(d.hr) bits.push(d.hr + Lx(' ครั้ง/นาที',' bpm'));
+  const done = bits.length > 0;
+  host.innerHTML = '<button class="mrow" id="dlBar" style="margin-bottom:18px">'+
+    '<span class="pill">' + (done ? '📈' : '📝') + '</span>'+
+    '<span class="bd"><span class="nm">' + Lx('บันทึกประจำวัน','Daily log') + '</span>'+
+    '<span class="tt">' + (done ? esc(bits.join(' · ')) : Lx('ยังไม่ได้บันทึกอะไรของวันนี้','Nothing recorded for today yet')) + '</span></span>'+
+    '<svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;stroke:var(--ink-3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M9 18l6-6-6-6"/></svg></button>';
+  $('#dlBar').onclick = () => dailySheet(todayStr());
+}
+
+
+/* ================================================================
+   อาหารและโภชนาการ
+   ค่าพลังงานคำนวณจากสารอาหารหลัก คาร์บและโปรตีนอย่างละ 4 ไขมัน 9 กิโลแคลอรีต่อกรัม
+   ================================================================ */
+let FOODS = [], FOOD_CATS = [];
+function foodName(f){ return LANG === 'en' ? f[1] : f[0]; }
+function foodServing(f){ return LANG === 'en' ? f[4] : f[3]; }
+function foodCatName(id){
+  const c = FOOD_CATS.find(x => x.id === id);
+  return c ? (LANG === 'en' ? c.en : c.th) : id;
+}
+function searchFoods(q, n){
+  q = String(q || '').trim().toLowerCase();
+  if(!q) return [];
+  const hits = [];
+  FOODS.forEach(f => {
+    const a = String(f[0]).toLowerCase(), b = String(f[1]).toLowerCase();
+    let sc = 0;
+    if(a === q || b === q) sc = 3;
+    else if(a.startsWith(q) || b.startsWith(q)) sc = 2;
+    else if(a.indexOf(q) >= 0 || b.indexOf(q) >= 0) sc = 1;
+    if(sc) hits.push({f:f, sc:sc});
+  });
+  hits.sort((x,y) => y.sc - x.sc || foodName(x.f).length - foodName(y.f).length);
+  return hits.slice(0, n || 12).map(x => x.f);
+}
+/* ---- รายการที่บันทึกไว้ในหนึ่งวัน ---- */
+function meals(ds){ const d = dayLog(ds); return (d && d.meals) || []; }
+function mealTotals(ds){
+  const t = {kcal:0, c:0, p:0, f:0, ml:0};
+  meals(ds).forEach(m => {
+    const q = +m.q || 1;
+    t.kcal += (m.kcal || 0) * q; t.c += (m.c || 0) * q;
+    t.p += (m.p || 0) * q; t.f += (m.f || 0) * q; t.ml += (m.ml || 0) * q;
+  });
+  Object.keys(t).forEach(k => t[k] = Math.round(t[k]));
+  return t;
+}
+function addMeal(ds, food, qty){
+  P.daily = P.daily || {};
+  const d = P.daily[ds] || (P.daily[ds] = {});
+  d.meals = d.meals || [];
+  d.meals.push({ n:food[0], ne:food[1], s:food[3], se:food[4],
+                 kcal:food[5], c:food[6], p:food[7], f:food[8], ml:food[9] || 0, q:qty || 1 });
+  save();
+}
+function removeMeal(ds, i){
+  const d = dayLog(ds); if(!d || !d.meals) return;
+  d.meals.splice(i, 1);
+  if(!d.meals.length) delete d.meals;
+  if(!Object.keys(d).length) delete P.daily[ds];
+  save();
+}
+function mealLabel(m){ return LANG === 'en' ? (m.ne || m.n) : m.n; }
+function mealServing(m){ return LANG === 'en' ? (m.se || m.s) : m.s; }
+
+/* ---- แผ่นเลือกอาหาร ---- */
+function foodPicker(ds, back){
+  let q = '', cat = FOOD_CATS.length ? FOOD_CATS[0].id : '';
+  const draw = () => {
+    const list = q.trim() ? searchFoods(q, 20) : FOODS.filter(f => f[2] === cat);
+    $('#fpBody').innerHTML =
+      '<input id="fpQ" placeholder="' + Lx('ค้นหาชื่ออาหาร ไทยหรืออังกฤษ','Search a dish, Thai or English') + '" value="' + esc(q) + '" autocomplete="off" style="margin-bottom:12px">'+
+      (q.trim() ? '' : '<div class="tagpick" style="margin-bottom:14px" id="fpCats">' +
+        FOOD_CATS.map(c => '<button data-c="' + c.id + '"' + (c.id === cat ? ' class="on"' : '') + '>' + esc(LANG === 'en' ? c.en : c.th) + '</button>').join('') + '</div>')+
+      (list.length ? list.map((f,i) =>
+        '<div class="mrow" style="align-items:center">'+
+        '<span class="bd"><span class="nm">' + esc(foodName(f)) + '</span>'+
+        '<span class="tt">' + esc(foodServing(f)) + ' · <b>' + fmtNum(f[5]) + Lx(' กิโลแคลอรี',' kcal') + '</b>'+
+        ' · ' + Lx('ค ','C ') + f[6] + Lx(' ป ',' P ') + f[7] + Lx(' ข ',' F ') + f[8] + Lx(' กรัม',' g') +
+        (f[9] ? ' · ' + f[9] + Lx(' มล.',' mL') : '') + '</span></span>'+
+        '<button class="btn sm" data-add="' + FOODS.indexOf(f) + '" style="flex:none">' + Lx('เพิ่ม','Add') + '</button></div>').join('')
+        : '<div class="empty"><p>' + Lx('ไม่พบอาหารชื่อนี้ในฐานข้อมูล','No dish by that name in the database') + '</p></div>');
+    const qi = $('#fpQ');
+    qi.oninput = () => { const pos = qi.selectionStart; q = qi.value; draw(); const n = $('#fpQ'); n.focus(); n.setSelectionRange(pos, pos); };
+    $$('#fpCats [data-c]').forEach(b => b.onclick = () => { cat = b.dataset.c; draw(); });
+    $$('#fpBody [data-add]').forEach(b => b.onclick = () => {
+      const f = FOODS[+b.dataset.add];
+      addMeal(ds, f, 1);
+      toast(Lx('เพิ่ม ' + f[0] + ' แล้ว','Added ' + f[1]));
+      dismissSheet();
+    });
+  };
+  openSheet('<div class="shd"><b>' + Lx('เพิ่มอาหาร','Add food') + '</b>'+
+    '<button class="btn sm ghost" onclick="dismissSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:-8px 0 14px;line-height:1.6">' +
+    Lx('ค่าพลังงานเป็นค่าโดยประมาณต่อหนึ่งหน่วยบริโภคมาตรฐาน อาหารจานเดียวกันคนละร้านต่างกันได้มาก อ้างอิงจากตารางแสดงคุณค่าทางโภชนาการของอาหารไทย กรมอนามัย และ USDA FoodData Central',
+       'Energy values are approximate for one standard serving. The same dish varies a lot between cooks. Based on the Nutritive Values of Thai Foods from the Thai Department of Health and USDA FoodData Central.') + '</p>'+
+    '<div id="fpBody"></div>', back);
+  draw();
+}
+
+/* ---- ส่วนอาหารในหน้าบันทึกประจำวัน ---- */
+function foodSection(ds){
+  const ms = meals(ds), t = mealTotals(ds), tdee = tdeeOf();
+  const pct = tdee ? Math.round(t.kcal / tdee * 100) : null;
+  const macroKcal = {c:t.c * 4, p:t.p * 4, f:t.f * 9};
+  const sum = macroKcal.c + macroKcal.p + macroKcal.f || 1;
+  return '<div class="card" style="box-shadow:none"><h3>🍽️ ' + Lx('อาหารและโภชนาการ','Food and nutrition') + '</h3>'+
+    (ms.length
+      ? '<div class="drow"><span class="dl">' + Lx('พลังงานรวมวันนี้','Energy today') + '</span>'+
+        '<span class="dv">' + fmtNum(t.kcal) + Lx(' กิโลแคลอรี',' kcal') + '</span>'+
+        (pct !== null ? '<span class="sev ' + (pct > 110 ? 'high' : pct >= 80 ? 'good' : 'low') + '">' + pct + '%</span>' : '') + '</div>'+
+        (tdee ? '<p class="dn">' + Lx('เทียบกับพลังงานที่ใช้ต่อวันของคุณ ','Against your daily energy of ') + fmtNum(tdee) +
+          Lx(' กิโลแคลอรี',' kcal') + '</p>' : '')+
+        '<div class="macbar">'+
+          '<i style="width:' + (macroKcal.c / sum * 100) + '%;background:#3FA9E0"></i>'+
+          '<i style="width:' + (macroKcal.p / sum * 100) + '%;background:#5FC97A"></i>'+
+          '<i style="width:' + (macroKcal.f / sum * 100) + '%;background:#E8A33D"></i>'+
+        '</div>'+
+        '<p class="dn"><b style="color:#3FA9E0">' + Lx('คาร์บ ','Carbs ') + t.c + Lx(' ก.',' g') + '</b> · '+
+        '<b style="color:#4CAF6A">' + Lx('โปรตีน ','Protein ') + t.p + Lx(' ก.',' g') + '</b> · '+
+        '<b style="color:#D2912F">' + Lx('ไขมัน ','Fat ') + t.f + Lx(' ก.',' g') + '</b>'+
+        (t.ml ? ' · ' + Lx('เครื่องดื่ม ','Drinks ') + fmtNum(t.ml) + Lx(' มล.',' mL') : '') + '</p>'+
+        ms.map((m,i) => '<div class="mealrow">'+
+          '<span class="bd"><span class="nm">' + esc(mealLabel(m)) + (m.q > 1 ? ' ×' + m.q : '') + '</span>'+
+          '<span class="tt">' + esc(mealServing(m)) + ' · ' + fmtNum((m.kcal || 0) * (m.q || 1)) + Lx(' กิโลแคลอรี',' kcal') + '</span></span>'+
+          '<button class="tick" data-mdel="' + i + '"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button></div>').join('')
+      : '<p class="dn">' + Lx('ยังไม่ได้บันทึกอาหารของวันนี้','No food recorded for this day yet') + '</p>')+
+    '<button class="btn ghost sm full" id="fpAdd" style="margin-top:10px">' + Lx('เพิ่มอาหาร','Add food') + '</button>'+
+    (tdee ? '' : '<p class="dn" style="margin-top:8px">' +
+      Lx('กรอกน้ำหนัก ส่วนสูง วันเกิด และเพศในโปรไฟล์ แล้วระบบจะเทียบพลังงานที่กินกับที่ใช้ให้',
+         'Add weight, height, date of birth and sex in your profile and the app will compare intake with what you burn') + '</p>')+
+    '</div>';
+}
+
+
+/* ================================================================
+   การนอนหลับ
+   ================================================================ */
+/* ระยะเวลานอนเป็นนาที รองรับการนอนข้ามเที่ยงคืน */
+function sleepMinutes(bed, wake){
+  if(!bed || !wake) return null;
+  const b = toMin(bed), w = toMin(wake);
+  if(b === w) return null;      /* เวลาเดียวกันแปลว่ากรอกผิด ไม่ใช่หลับ 24 ชั่วโมง */
+  let m = w - b;
+  if(m < 0) m += 24 * 60;
+  return m;
+}
+function fmtDuration(m){
+  if(m == null) return '';
+  const h = Math.floor(m / 60), mm = m % 60;
+  if(LANG === 'en') return h + ' h' + (mm ? ' ' + mm + ' min' : '');
+  return h + ' ชั่วโมง' + (mm ? ' ' + mm + ' นาที' : '');
+}
+/* ช่วงเวลานอนที่แนะนำตามอายุ ตามคำแนะนำของ National Sleep Foundation */
+function sleepTarget(){
+  const a = ageOf();
+  if(a === null) return {lo:7, hi:9, note:null};
+  if(a <= 13) return {lo:9,  hi:11, note:'เด็กวัยเรียน'};
+  if(a <= 17) return {lo:8,  hi:10, note:'วัยรุ่น'};
+  if(a <= 64) return {lo:7,  hi:9,  note:null};
+  return {lo:7, hi:8, note:'ผู้สูงอายุ'};
+}
+function sleepClass(m){
+  if(m == null) return null;
+  const t = sleepTarget(), h = m / 60;
+  if(h < t.lo - 1) return {k:'high', th:'สั้นกว่าที่แนะนำมาก', en:'much shorter than recommended'};
+  if(h < t.lo)     return {k:'mod',  th:'สั้นกว่าที่แนะนำ',    en:'shorter than recommended'};
+  if(h <= t.hi)    return {k:'ok',   th:'อยู่ในช่วงที่แนะนำ',  en:'within the recommended range'};
+  if(h <= t.hi + 1) return {k:'mod', th:'นานกว่าที่แนะนำ',    en:'longer than recommended'};
+  return {k:'mod', th:'นานกว่าที่แนะนำมาก', en:'much longer than recommended'};
+}
+/* ค่าเฉลี่ยการนอนย้อนหลัง n วัน */
+function avgSleep(days){
+  let total = 0, n = 0;
+  for(let i = 0; i < days; i++){
+    const t = new Date(); t.setDate(t.getDate() - i);
+    const d = dayLog(todayStr(t));
+    if(!d) continue;
+    const m = sleepMinutes(d.bed, d.wake);
+    if(m !== null){ total += m; n++; }
+  }
+  return n ? {avg:Math.round(total / n), days:n} : null;
+}
+const DAILY_OPTS = {};
+const SLEEP_Q = [
+  {v:1, ic:'😫', th:'แย่มาก',   en:'Very poor'},
+  {v:2, ic:'😕', th:'ไม่ค่อยดี', en:'Poor'},
+  {v:3, ic:'😐', th:'พอใช้',    en:'Fair'},
+  {v:4, ic:'🙂', th:'ดี',       en:'Good'},
+  {v:5, ic:'😀', th:'ดีมาก',    en:'Very good'}
+];
+DAILY_OPTS.SLEEP_Q = SLEEP_Q;
 
 /* ---- แผ่นระบุยาที่แพ้ ---- */
 function allergySheet(back){
@@ -2376,7 +2934,7 @@ async function checkAnswer(answer){
     DEK = w.key;
     const obj = await openJSON(P.vault);
     VAULT_FIELDS.forEach(f => { P[f] = obj[f] !== undefined ? obj[f] : (f === 'meds' ? [] : {}); });
-    P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light', vitals:{sys:null,dia:null,hr:null,at:null}}, P.body || {});
+    P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light'}, P.body || {});
     return true;
   }
   if(!P.ansHash || !P.ansSalt) return false;
@@ -2747,6 +3305,7 @@ function renderToday(){
   renderCondAlert();
   renderStock();
   renderWater();
+  renderDailyCard();
   renderBackupNudge();
   $('#tdWarn').innerHTML = uniq.length ? (
     '<button class="mrow" id="warnBar" style="border-color:color-mix(in srgb,var(--danger) 32%,var(--line));'+
@@ -3154,7 +3713,7 @@ function drawEditor(){
         const tgt = w ? Math.round(w * 32 / 50) * 50 : null;
         pv.innerHTML = 'ครั้งละ ' + esc(fmtAmt(per * (d.strength||0), 'mL')) + ' · วันละ ' + n + ' ครั้ง รวม ' +
           esc(fmtAmt(day, 'mL')) + ' ต่อวัน' +
-          (tgt ? '<br>ร่างกายคุณที่ ' + w + ' กก. ต้องการน้ำราว ' + esc(fmtAmt(tgt, 'mL')) +
+          (tgt ? '<br>ร่างกายคุณที่ ' + showMass(w) + ' ต้องการน้ำราว ' + esc(fmtAmt(tgt, 'mL')) +
             ' ต่อวัน ตอนนี้ตั้งไว้ ' + Math.round(day / tgt * 100) + '%' : '');
       } else {
         pv.innerHTML = d.strength
@@ -3361,11 +3920,19 @@ function renderCal(){
   const ds = dosesFor(selDate), dObj = parseDate(selDate);
   $('#dayDetail').innerHTML = '<div class="card"><h3>' + thDate(dObj) + '</h3>'+
     '<p class="h">' + (ds.length ? ds.length + ' รายการ' : 'ไม่มีรายการในวันนี้') + '</p>'+
+    '<button class="btn ghost sm full" id="calDaily" style="margin-bottom:12px">' +
+      (dayHas(selDate) ? Lx('ดูบันทึกของวันที่เลือก','See the log for this day')
+                       : Lx('เพิ่มบันทึกของวันที่เลือก','Add a log for this day')) + '</button>'+
     ds.map(d => '<div class="row"><span class="pill">' + (d.med.icon||'💊') + '</span>'+
       '<span class="g"><b>' + esc(d.med.name) + '</b><span class="num">' + d.time + (MEAL[d.med.meal||'none'].short ? ' · ' + MEAL[d.med.meal||'none'].short : '') + '</span></span>'+
       '<span class="sev ' + (d.status === 'taken' ? 'good' : d.status === 'skipped' ? 'low' : selDate < todayStr() ? 'high' : 'low') + '">'+
       (d.status === 'taken' ? 'กินแล้ว' : d.status === 'skipped' ? 'ข้าม' : selDate < todayStr() ? 'ไม่ได้บันทึก' : 'รอ') + '</span></div>').join('') +
     '</div>';
+  bindCalDaily();
+}
+function bindCalDaily(){
+  const b = $('#calDaily');
+  if(b) b.onclick = () => dailySheet(selDate, () => go('cal'));
 }
 $('#calPrev').onclick = () => { calCursor.setMonth(calCursor.getMonth()-1); renderCal(); };
 $('#calNext').onclick = () => { calCursor.setMonth(calCursor.getMonth()+1); renderCal(); };
@@ -3702,7 +4269,7 @@ async function bioUnlock(auto){
       DEK = w.key;
       const obj = await openJSON(P.vault);
       VAULT_FIELDS.forEach(f => { P[f] = obj[f] !== undefined ? obj[f] : (f === 'meds' ? [] : {}); });
-      P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light', vitals:{sys:null,dia:null,hr:null,at:null}}, P.body || {});
+      P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light'}, P.body || {});
     }
     enterApp();
   }catch(e){
@@ -3733,10 +4300,11 @@ function bodyLine(){
   const b = P.body, a = ageOf(), parts = [];
   if(b.sex) parts.push({f:'หญิง', m:'ชาย', x:'ไม่ระบุเพศ'}[b.sex]);
   if(a !== null) parts.push(a + ' ปี');
-  if(b.weight) parts.push(b.weight + ' กก.');
-  if(b.height) parts.push(b.height + ' ซม.');
-  if(b.waist) parts.push('เอว ' + b.waist + ' ซม.');
-  if(b.vitals && b.vitals.sys && b.vitals.dia) parts.push(b.vitals.sys + '/' + b.vitals.dia);
+  if(b.weight) parts.push(showMass(b.weight));
+  if(b.height) parts.push(isImperial() ? (cmToFtIn(b.height).ft + "'" + cmToFtIn(b.height).inch + '"') : showLen(b.height));
+  if(b.waist) parts.push(Lx('เอว ','waist ') + showLen(b.waist));
+  const lv = latestVitals();
+  if(lv.sys && lv.dia) parts.push(lv.sys + '/' + lv.dia);
   if(b.pregnant) parts.push('ตั้งครรภ์');
   return parts.length ? ' · ' + parts.join(' · ') : ' · ยังไม่ได้กรอกข้อมูลร่างกาย';
 }
@@ -3761,6 +4329,14 @@ function renderSettings(){
   });
   $$('#leadSeg button').forEach(b => b.classList.toggle('on', +b.dataset.v === s.lead));
   $$('#langSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === LANG));
+  $$('#unitSeg button').forEach(b => {
+    b.classList.toggle('on', b.dataset.v === unitSys());
+    b.onclick = () => {
+      P.settings.units = b.dataset.v; save(); renderSettings(); renderToday();
+      toast(b.dataset.v === 'imperial' ? Lx('เปลี่ยนเป็นปอนด์และฟุตนิ้วแล้ว','Switched to pounds and feet')
+                                       : Lx('เปลี่ยนเป็นกิโลกรัมและเซนติเมตรแล้ว','Switched to kilograms and centimetres'));
+    };
+  });
   $$('#dateSeg button, #dateSeg2 button').forEach(b => {
     b.classList.toggle('on', b.dataset.v === dateStyle());
     b.onclick = () => { P.settings.dateFmt = b.dataset.v; save(); renderSettings(); renderToday(); renderCal(); };
@@ -3820,6 +4396,30 @@ function renderSettings(){
       : Lx('เบราว์เซอร์นี้ไม่รองรับ','Not supported in this browser');
   const sb = $('#shareBtn');
   if(sb){ sb.classList.toggle('hide', !canShareFiles()); sb.onclick = shareBackup; }
+  $('#dailyOn').classList.toggle('on', !!P.settings.daily);
+  $('#dailyOn').onclick = () => {
+    P.settings.daily = P.settings.daily ? 0 : 1; save(); renderSettings(); renderToday();
+  };
+  const dst = $('#dailyState');
+  if(dst) dst.textContent = P.settings.daily
+    ? Lx('เก็บน้ำหนัก ความดัน ชีพจร อาหาร การนอน และการเคลื่อนไหวรายวัน','Records weight, blood pressure, pulse, food, sleep and movement each day')
+    : Lx('ปิดอยู่ การ์ดบนหน้าวันนี้จะไม่ขึ้น','Off — the card on Today is hidden');
+  const dsz = $('#dailySize');
+  if(dsz){
+    const st = dailyStats();
+    dsz.textContent = st.days
+      ? Lx(st.days + ' วัน ราว ' + Math.max(1, Math.round(st.bytes/1024)) + ' กิโลไบต์',
+           st.days + ' days, about ' + Math.max(1, Math.round(st.bytes/1024)) + ' KB')
+      : Lx('ยังไม่มีข้อมูล','Nothing yet');
+  }
+  const dpr = $('#dailyPrune');
+  if(dpr) dpr.onclick = () => {
+    const n = pruneDaily();
+    save(); renderSettings();
+    toast(n ? Lx('ลบบันทึกที่เก่ากว่า ' + DAILY_KEEP_DAYS + ' วันและที่ว่างเปล่าออก ' + n + ' รายการ',
+                 'Removed ' + n + ' entries older than ' + DAILY_KEEP_DAYS + ' days or empty')
+            : Lx('ไม่มีอะไรต้องเก็บกวาด','Nothing to clean up'));
+  };
   const av = $('#appVer');
   if(av) av.textContent = Lx('เวอร์ชัน ' + APP_VERSION, 'Version ' + APP_VERSION);
   const vc = $('#verCheck');
@@ -3867,7 +4467,7 @@ $('#btnBell').onclick = notifSheet;
 function profileSheet(){
   const B = P.body;
   const draw = () => {
-    const V = B.vitals || (B.vitals = {sys:null,dia:null,hr:null,at:null});
+    const V = latestVitals();
     const a = ageOf(), bmi = bmiOf();
     $('#pBody').innerHTML =
       '<div class="fld"><label class="fl">ชื่อ</label><input id="pName" value="' + esc(P.name) + '"></div>'+
@@ -3885,12 +4485,17 @@ function profileSheet(){
       '<div class="fld"><label class="fl">วันเกิด</label>'+
         dateField('pBirth', B.birth, 'เลือกวันเกิด')+
         '<p class="src" style="margin-top:6px" id="pAgeLine">' + (a !== null ? 'อายุ ' + a + ' ปี' : '') + '</p></div>'+
-      '<div class="two"><div class="fld"><label class="fl">น้ำหนัก (กิโลกรัม)</label>'+
-        '<input type="number" id="pW" min="1" max="400" step="0.1" placeholder="เช่น 62" value="' + (B.weight==null?'':B.weight) + '"></div>'+
-        '<div class="fld"><label class="fl">ส่วนสูง (เซนติเมตร)</label>'+
-        '<input type="number" id="pH" min="30" max="260" step="0.5" placeholder="เช่น 168" value="' + (B.height==null?'':B.height) + '"></div></div>'+
-      '<div class="two"><div class="fld"><label class="fl">เส้นรอบเอว (เซนติเมตร)</label>'+
-        '<input type="number" id="pWaist" min="30" max="200" step="0.5" placeholder="เช่น 80" value="' + (B.waist==null?'':B.waist) + '"></div>'+
+      '<div class="two"><div class="fld"><label class="fl">' + Lx('น้ำหนัก','Weight') + ' (' + wUnit() + ')</label>'+
+        '<input type="number" id="pW" min="' + (isImperial()?2:1) + '" max="' + (isImperial()?880:400) + '" step="0.1" placeholder="' + (isImperial()?'137':'62') + '" value="' + (kgToDisp(B.weight)==null?'':kgToDisp(B.weight)) + '"></div>'+
+        (isImperial()
+          ? '<div class="fld"><label class="fl">' + Lx('ส่วนสูง','Height') + ' (' + Lx('ฟุต นิ้ว','ft in') + ')</label>'+
+            '<div class="numrow"><input type="number" id="pHft" min="1" max="8" step="1" placeholder="5" value="' + (cmToFtIn(B.height).ft==null?'':cmToFtIn(B.height).ft) + '">'+
+            '<input type="number" id="pHin" min="0" max="11.9" step="0.5" placeholder="6" value="' + (cmToFtIn(B.height).inch==null?'':cmToFtIn(B.height).inch) + '"></div></div>'
+          : '<div class="fld"><label class="fl">' + Lx('ส่วนสูง','Height') + ' (' + lUnit() + ')</label>'+
+            '<input type="number" id="pH" min="30" max="260" step="0.5" placeholder="เช่น 168" value="' + (B.height==null?'':B.height) + '"></div>')+
+        '</div>'+
+      '<div class="two"><div class="fld"><label class="fl">' + Lx('เส้นรอบเอว','Waist') + ' (' + lUnit() + ')</label>'+
+        '<input type="number" id="pWaist" min="' + (isImperial()?12:30) + '" max="' + (isImperial()?80:200) + '" step="0.5" placeholder="' + (isImperial()?'32':'80') + '" value="' + (cmToDisp(B.waist)==null?'':cmToDisp(B.waist)) + '"></div>'+
         '<div class="fld"><label class="fl">ระดับกิจกรรม</label>'+
         '<select id="pAct">' + ACTIVITY.map(x => '<option value="' + x.id + '"' + (x.id===(B.activity||'light')?' selected':'') + '>' + esc(L2(x)) + '</option>').join('') + '</select></div></div>'+
       '<p class="src" style="margin:-6px 0 14px">' + esc(LANG === 'en' ? activityOf().den : activityOf().dth) +
@@ -3908,15 +4513,16 @@ function profileSheet(){
           : '<span style="font-size:13px;color:var(--ink-3)">ยังไม่ได้ระบุ</span>') + '</div>'+
         '<button class="btn ghost sm full" id="pAlBtn" style="margin-top:9px">ระบุยาที่แพ้</button></div>'+
       '</div>'+
-      '<div class="card" style="box-shadow:none"><h3>สัญญาณชีพ</h3>'+
-      '<p class="h">กรอกค่าที่วัดได้ล่าสุด ระบบจะบอกว่าอยู่ในเกณฑ์ไหน</p>'+
-      '<div class="three">'+
-        '<div><label class="fl">ตัวบน</label><input type="number" id="pSys" min="50" max="260" placeholder="120" value="' + (V.sys==null?'':V.sys) + '"></div>'+
-        '<div><label class="fl">ตัวล่าง</label><input type="number" id="pDia" min="30" max="160" placeholder="80" value="' + (V.dia==null?'':V.dia) + '"></div>'+
-        '<div><label class="fl">ชีพจร</label><input type="number" id="pHr" min="25" max="220" placeholder="72" value="' + (V.hr==null?'':V.hr) + '"></div>'+
-      '</div>'+
-      '<p class="src" style="margin-top:8px">' + (V.at ? 'วัดเมื่อ ' + fmtDate(V.at) : 'ยังไม่ได้กรอก') +
-        ' · นั่งพัก 5 นาทีก่อนวัด และวัดซ้ำอีกครั้งห่างกัน 1 ถึง 2 นาที</p>'+
+      '<div class="card" style="box-shadow:none"><h3>สัญญาณชีพล่าสุด</h3>'+
+      '<p class="h">ค่าที่วัดได้ล่าสุดจากบันทึกประจำวัน</p>'+
+      (V.sys || V.dia || V.hr
+        ? '<div class="drow"><span class="dl">ความดันโลหิต</span><span class="dv">' +
+          (V.sys && V.dia ? V.sys + '/' + V.dia : '—') + '</span></div>'+
+          '<div class="drow"><span class="dl">ชีพจรขณะพัก</span><span class="dv">' + (V.hr || '—') + '</span></div>'+
+          '<p class="dn">' + (V.at ? 'วัดเมื่อ ' + fmtDate(V.at) : '') + '</p>'
+        : '<p class="dn">ยังไม่มีค่าที่บันทึกไว้</p>')+
+      '<button class="btn ghost sm full" id="pVitBtn" style="margin-top:8px">บันทึกค่าที่วัดวันนี้</button>'+
+      '<p class="dn" style="margin-top:8px">นั่งพัก 5 นาทีก่อนวัด และวัดซ้ำอีกครั้งห่างกัน 1 ถึง 2 นาที</p>'+
       '</div>'+
       '<div id="pDerived">' + derivedBlock() + '</div>'+
       '<div class="card" style="box-shadow:none;display:none">'+
@@ -3927,20 +4533,21 @@ function profileSheet(){
     const sync = () => {
       const g = id => $(id);
       if(g('#pBirth')) B.birth = g('#pBirth').value || null;
-      if(g('#pW')) B.weight = g('#pW').value === '' ? null : +g('#pW').value;
+      if(g('#pW')) B.weight = g('#pW').value === '' ? null : dispToKg(+g('#pW').value);
       if(g('#pH')) B.height = g('#pH').value === '' ? null : +g('#pH').value;
-      if(g('#pWaist')) B.waist = g('#pWaist').value === '' ? null : +g('#pWaist').value;
+      if(g('#pHft') || g('#pHin')){
+        const ft = g('#pHft') ? g('#pHft').value : '', inch = g('#pHin') ? g('#pHin').value : '';
+        B.height = (ft === '' && inch === '') ? null : ftInToCm(ft, inch);
+      }
+      if(g('#pWaist')) B.waist = g('#pWaist').value === '' ? null : dispToCm(+g('#pWaist').value);
       if(g('#pAct')) B.activity = g('#pAct').value;
-      const vv = B.vitals || (B.vitals = {});
-      const before = [vv.sys, vv.dia, vv.hr].join(',');
-      if(g('#pSys')) vv.sys = g('#pSys').value === '' ? null : +g('#pSys').value;
-      if(g('#pDia')) vv.dia = g('#pDia').value === '' ? null : +g('#pDia').value;
-      if(g('#pHr'))  vv.hr  = g('#pHr').value  === '' ? null : +g('#pHr').value;
-      if([vv.sys, vv.dia, vv.hr].join(',') !== before) vv.at = todayStr();
+
     };
     const bd = $('#pBirth');
     if(bd) bd.onchange = () => { sync(); refreshDateField('pBirth'); refreshDerived(); };
-    ['#pW','#pH','#pWaist','#pSys','#pDia','#pHr'].forEach(x => {
+    const pv = $('#pVitBtn');
+    if(pv) pv.onclick = () => { sync(); save(); dailySheet(todayStr(), profileSheet); };
+    ['#pW','#pH','#pHft','#pHin','#pWaist'].forEach(x => {
       const e = $(x); if(e) e.oninput = () => { sync(); refreshDerived(); };
     });
     const ac = $('#pAct'); if(ac) ac.onchange = () => { sync(); draw(); };
@@ -3982,12 +4589,9 @@ function profileSheet(){
     if(window.__psync) window.__psync();
     const n = $('#pName').value.trim();
     if(!n){ toast('ใส่ชื่อก่อน'); return; }
-    if(B.weight !== null && (B.weight < 1 || B.weight > 400)){ toast('น้ำหนักดูไม่ถูกต้อง'); return; }
+    if(B.weight !== null && (B.weight < 1 || B.weight > 400)){ toast(Lx('น้ำหนักดูไม่ถูกต้อง','That weight does not look right')); return; }
     if(B.height !== null && (B.height < 30 || B.height > 260)){ toast('ส่วนสูงดูไม่ถูกต้อง'); return; }
     if(B.waist !== null && (B.waist < 30 || B.waist > 200)){ toast(Lx('เส้นรอบเอวดูไม่ถูกต้อง','That waist measurement does not look right')); return; }
-    const V2 = B.vitals || {};
-    if(V2.sys !== null && V2.dia !== null && V2.sys && V2.dia && V2.sys <= V2.dia){
-      toast(Lx('ความดันตัวบนต้องมากกว่าตัวล่าง','The upper number must be higher than the lower one')); return; }
     P.name = n; save(); closeSheet(); paintTop(); renderSettings(); renderToday(); toast('บันทึกแล้ว');
   };
   const del = $('#pDel');
@@ -4420,6 +5024,7 @@ $$('#medFilter button').forEach(b => b.onclick = () => {
 });
 $('#condEdit').onclick = () => conditionPicker(() => go('health'));
 $('#allergyEdit').onclick = () => allergySheet(() => go('health'));
+$('#dlOpen').onclick = () => dailySheet(todayStr(), () => go('health'));
 $('#btnAdd').onclick = () => medEditor(null);
 window.closeSheet = closeSheet;
 
@@ -4785,7 +5390,23 @@ const DICT = {
 'กำลังใช้อยู่':'in use','แก้ไขโปรไฟล์':'Edit profile','เลือกผู้ใช้':'Choose a profile','เปลี่ยนผู้ใช้':'Switch profile',
 'ลบโปรไฟล์นี้':'Delete this profile','ชื่อ':'Name','เพศ':'Sex','หญิง':'Female','ชาย':'Male','ไม่ระบุ':'Prefer not to say',
 'วันเกิด':'Date of birth','น้ำหนัก (กิโลกรัม)':'Weight (kg)','ส่วนสูง (เซนติเมตร)':'Height (cm)','ข้อมูลร่างกาย':'Body details','เส้นรอบเอว (เซนติเมตร)':'Waist (cm)','ระดับกิจกรรม':'Activity level',
-'สัญญาณชีพ':'Vital signs','กรอกค่าที่วัดได้ล่าสุด ระบบจะบอกว่าอยู่ในเกณฑ์ไหน':'Enter your latest readings and the app will tell you where they sit',
+'สัญญาณชีพ':'Vital signs','สัญญาณชีพล่าสุด':'Latest vital signs',
+'ค่าที่วัดได้ล่าสุดจากบันทึกประจำวัน':'The most recent readings from your daily log',
+'ยังไม่มีค่าที่บันทึกไว้':'Nothing recorded yet','บันทึกค่าที่วัดวันนี้':"Record today's readings",
+'อาหารและโภชนาการ':'Food and nutrition','เพิ่มอาหาร':'Add food',
+'ค้นหาชื่ออาหาร ไทยหรืออังกฤษ':'Search a dish, Thai or English',
+'ไม่พบอาหารชื่อนี้ในฐานข้อมูล':'No dish by that name in the database',
+'ยังไม่ได้บันทึกอาหารของวันนี้':'No food recorded for this day yet',
+'พลังงานรวมวันนี้':'Energy today','การนอนหลับ':'Sleep','เข้านอน':'Went to bed','ตื่นนอน':'Woke up','คุณภาพการนอน':'Sleep quality',
+'ตื่นกลางดึกกี่ครั้ง':'Times woken','แย่มาก':'Very poor','ไม่ค่อยดี':'Poor','พอใช้':'Fair','ดีมาก':'Very good',
+'บันทึกประจำวัน':'Daily log','การเคลื่อนไหว':'Movement','จำนวนก้าว':'Steps',
+'เวลาที่ขยับร่างกาย':'Active minutes','แคลอรีจากกิจกรรม':'Active calories',
+'เว็บอ่านค่าจากนาฬิกาหรือแอปสุขภาพของเครื่องไม่ได้ ต้องดูตัวเลขจากที่นั่นแล้วมากรอกเอง':'A web app cannot read from your watch or the phone health app — check the numbers there and enter them here',
+'น้ำหนัก ความดัน และชีพจร บันทึกย้อนหลังได้':'Weight, blood pressure and pulse — you can fill in past days too','เปิดบันทึกประจำวัน':'Open the daily log',
+'น้ำหนัก ความดัน และชีพจร บันทึกย้อนหลังได้':'Weight, blood pressure and pulse — you can fill in past days too',
+'ขนาดบันทึกประจำวัน':'Daily log size','เก็บกวาด':'Clean up','ยังไม่มีข้อมูล':'Nothing yet',
+'เก็บน้ำหนัก ความดัน ชีพจร และการเคลื่อนไหวรายวัน':'Records weight, blood pressure, pulse and movement each day',
+'เช่น วันนี้เวียนหัวตอนเช้า หรือ ลืมกินยามื้อเที่ยง':'e.g. dizzy this morning, or missed the midday dose','กรอกค่าที่วัดได้ล่าสุด ระบบจะบอกว่าอยู่ในเกณฑ์ไหน':'Enter your latest readings and the app will tell you where they sit',
 'ตัวบน':'Systolic','ตัวล่าง':'Diastolic','ชีพจร':'Pulse','ยังไม่ได้กรอก':'Not entered yet',
 'วัดรอบเอวที่ระดับสะดือ หายใจออกตามปกติ ไม่แขม่วท้อง':'Measure at navel level, breathing out normally, without pulling in',
 'นั่งพัก 5 นาทีก่อนวัด และวัดซ้ำอีกครั้งห่างกัน 1 ถึง 2 นาที':'Sit quietly for 5 minutes first, then take a second reading 1 to 2 minutes later',
@@ -4802,7 +5423,10 @@ const DICT = {
 'ตั้งค่าการแจ้งเตือน':'Notification settings','น้ำดื่ม':'Water','น้ำดื่มวันนี้':'Water today',
 'ยังไม่ได้กรอกปริมาณต่อแก้ว':'No volume set per serving',
 'ยาที่ใกล้หมด':'Running low','เติม':'Refill','จำนวนคงเหลือใกล้ถึงจำนวนที่ตั้งเตือนไว้':'The remaining count is near the level you set',
-'อัปเดตจำนวนคงเหลือแล้ว':'Stock updated','รูปแบบวันที่':'Date format','เลือกวันที่':'Pick a date','เลือกวันเกิด':'Pick a date of birth','ยังไม่กำหนด':'Not set',
+'อัปเดตจำนวนคงเหลือแล้ว':'Stock updated','หน่วยวัด':'Units','กิโลกรัม เซนติเมตร':'kg and cm','ปอนด์ ฟุตนิ้ว':'lb and ft/in',
+'ใช้กับน้ำหนัก ส่วนสูง และเส้นรอบเอว ส่วนขนาดยายังเป็นมิลลิกรัมและมิลลิลิตรเสมอ เพราะเป็นหน่วยสากลของยา':'Applies to weight, height and waist. Medicine strengths stay in mg and mL, which are the international standard for medicines.',
+'เปลี่ยนเป็นปอนด์และฟุตนิ้วแล้ว':'Switched to pounds and feet','เปลี่ยนเป็นกิโลกรัมและเซนติเมตรแล้ว':'Switched to kilograms and centimetres',
+'รูปแบบวันที่':'Date format','เลือกวันที่':'Pick a date','เลือกวันเกิด':'Pick a date of birth','ยังไม่กำหนด':'Not set',
 'ชื่อตัวยาหรืออาหารเสริม':'Medicine or supplement name',
 'พิมพ์ชื่อสามัญหรือชื่อการค้า เช่น ซาร่า พารา Panadol':'Type a generic or brand name, e.g. Sara, Panadol',
 'ยังไม่มีชื่อนี้ในคลัง เพิ่มเข้าคลังยาส่วนตัว':'Not in the library yet — add it to my drug library',
@@ -5120,16 +5744,23 @@ function firstRun(){
 }
 function migrate(){
   DB.profiles.forEach(p => {
-    p.settings = Object.assign({theme:'pandan',dark:0,custom:null,customOn:0,lead:5,sound:1,nag:10,autoLock:5,lang:'th',dateFmt:'dmy'}, p.settings||{});
+    p.settings = Object.assign({theme:'pandan',dark:0,custom:null,customOn:0,lead:5,sound:1,nag:10,autoLock:5,lang:'th',dateFmt:'dmy',daily:1,units:'metric'}, p.settings||{});
     if(p.settings.nag === true) p.settings.nag = 10;
     if(p.settings.nag === false) p.settings.nag = 0;
     p.settings.nag = +p.settings.nag || 0;
-    p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light', vitals:{sys:null,dia:null,hr:null,at:null}}, p.body || {});
+    p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light'}, p.body || {});
     if(!Array.isArray(p.body.conditions)) p.body.conditions = [];
     if(!Array.isArray(p.body.allergies)) p.body.allergies = [];
-    p.body.vitals = Object.assign({sys:null,dia:null,hr:null,at:null}, p.body.vitals || {});
     if(!p.body.activity) p.body.activity = 'light';
     p.logs = p.logs || {}; p.notified = p.notified || {}; p.snoozes = p.snoozes || {}; p.meds = p.meds || [];
+    p.daily = p.daily || {};
+    /* ค่าสัญญาณชีพเดิมที่เก็บไว้ในโปรไฟล์ ย้ายเข้าบันทึกรายวันของวันที่วัด */
+    if(p.body.vitals && (p.body.vitals.sys || p.body.vitals.dia || p.body.vitals.hr)){
+      const at = p.body.vitals.at || todayStr();
+      const day = p.daily[at] || (p.daily[at] = {});
+      ['sys','dia','hr'].forEach(k => { if(p.body.vitals[k] && day[k] === undefined) day[k] = p.body.vitals[k]; });
+      delete p.body.vitals;
+    }
     p.meds.forEach(m => {
       m.freq = m.freq || {mode:'daily'};
       m.times = m.times && m.times.length ? m.times : ['08:00'];
@@ -5149,7 +5780,7 @@ async function loadData(){
   const j = await r.json();
   if(!j || !Array.isArray(j.rules) || !Array.isArray(j.catalog) || !j.info) throw new Error('bad data');
   RULES = j.rules; CATALOG = j.catalog; INFO = j.info;
-  BRANDS = j.brands || []; SIZES = j.sizes || {}; CONDITIONS = j.conditions || [];
+  BRANDS = j.brands || []; SIZES = j.sizes || {}; CONDITIONS = j.conditions || []; FOODS = j.foods || []; FOOD_CATS = j.foodCats || [];
 }
 function dataError(e){
   $('#lock').style.display = 'flex';
@@ -5175,7 +5806,7 @@ function boot(){
 loadData().then(boot).catch(dataError);
 
 /* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
-const APP_VERSION = '22';
+const APP_VERSION = '26';
 let swReg = null, updWaiting = null, updReloading = false;
 function showUpdateBar(w){
   updWaiting = w;
