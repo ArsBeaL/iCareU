@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#128A6E">
-<title>iCareU — บันทึกยาและอาหารเสริม</title>
+<title>iCareU</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -459,6 +459,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
     <div id="tdDose"></div>
     <div id="tdStock"></div>
     <div id="tdWater"></div>
+    <div id="tdBackup"></div>
     <div class="rail" id="rail"></div>
   </section>
 
@@ -667,11 +668,21 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
     <div class="card">
       <h3>ข้อมูลของคุณ</h3>
       <p class="h">สำรองไฟล์ไว้เป็นระยะ เพราะข้อมูลอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น</p>
+      <button class="btn full sm hide" id="shareBtn" style="margin-bottom:9px">ส่งไปเก็บที่ Drive หรือแอปอื่น</button>
       <div class="two">
         <button class="btn ghost sm" id="expBtn">บันทึกไฟล์สำรอง</button>
         <button class="btn ghost sm" id="impBtn">นำไฟล์กลับเข้ามา</button>
       </div>
-      <input type="file" id="impFile" accept="application/json" class="hide">
+      <input type="file" id="impFile" accept=".json,application/json" class="hide">
+      <div class="row" style="margin-top:12px">
+        <div class="g"><b>ที่อยู่เว็บของข้อมูลชุดนี้</b><span id="dataOrigin">—</span></div>
+      </div>
+      <div class="row">
+        <div class="g"><b>พื้นที่เก็บข้อมูลถาวร</b><span id="persistState">กำลังตรวจสอบ</span></div>
+      </div>
+      <div class="row">
+        <div class="g"><b>สำรองข้อมูลล่าสุด</b><span id="lastBackup">ยังไม่เคยสำรอง</span></div>
+      </div>
       <button class="btn dgr full sm" id="wipeBtn" style="margin-top:10px">ลบข้อมูลทั้งหมดในเครื่องนี้</button>
     </div>
 
@@ -1212,6 +1223,27 @@ function myConflicts(tags, selfId){
   return out.filter(x => { const k = x.med.id + x.r.t; if(seen.has(k)) return false; seen.add(k); return true; });
 }
 
+/* ---- เตือนให้สำรองข้อมูล ---- */
+function renderBackupNudge(){
+  const host = $('#tdBackup'); if(!host) return;
+  const n = (P.meds || []).length;
+  const d = daysSince(DB.lastBackup);
+  if(!n || (d !== null && d < 14)){ host.innerHTML = ''; return; }
+  host.innerHTML = '<button class="mrow" id="bkBar" style="margin-bottom:18px;'+
+    'border-color:color-mix(in srgb,var(--warn) 32%,var(--line));background:var(--warn-bg)">'+
+    '<span class="pill" style="background:color-mix(in srgb,var(--warn) 16%,transparent)">💾</span>'+
+    '<span class="bd"><span class="nm" style="color:var(--warn)">' +
+      (d === null ? Lx('ยังไม่เคยสำรองข้อมูลเลย','You have never backed up')
+                  : Lx('สำรองข้อมูลครั้งล่าสุดเมื่อ ' + d + ' วันก่อน','Last backup was ' + d + ' days ago')) + '</span>'+
+    '<span class="tt" style="color:var(--warn);opacity:.85">' +
+      (canShareFiles()
+        ? Lx('แตะเพื่อส่งไฟล์สำรองไปเก็บที่ Drive หรือแอปอื่น','Tap to send a backup to Drive or another app')
+        : Lx('ข้อมูลอยู่ในเบราว์เซอร์เท่านั้น ถ้าเปลี่ยนที่อยู่เว็บหรือล้างข้อมูลจะหายหมด',
+             'Everything lives in this browser — changing the web address or clearing data wipes it')) + '</span></span>'+
+    '<svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;stroke:var(--warn);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M9 18l6-6-6-6"/></svg></button>';
+  $('#bkBar').onclick = () => { exportBackup(); };
+}
+
 /* ---- สรุปน้ำดื่มของวันนี้ ---- */
 function renderWater(){
   const host = $('#tdWater'); if(!host) return;
@@ -1578,6 +1610,19 @@ async function openJSON(v){
   const buf = await crypto.subtle.decrypt({name:'AES-GCM', iv:unb64u(v.iv)}, DEK, unb64u(v.ct));
   return JSON.parse(new TextDecoder().decode(buf));
 }
+/* ขอสถานะพื้นที่เก็บข้อมูลแบบถาวร เบราว์เซอร์จะได้ไม่ล้างทิ้งเองเมื่อพื้นที่ไม่พอ */
+let persistState = null;
+async function askPersist(){
+  try{
+    if(!navigator.storage || !navigator.storage.persist) return null;
+    if(await navigator.storage.persisted()) return persistState = true;
+    return persistState = await navigator.storage.persist();
+  }catch(e){ return persistState = null; }
+}
+function daysSince(iso){
+  if(!iso) return null;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+}
 function cryptoReady(){ return !!(window.crypto && crypto.subtle && window.isSecureContext); }
 
 /* ---- อ่านและเขียนข้อมูลแบบเข้ารหัส ---- */
@@ -1607,7 +1652,8 @@ async function writeDB(){
     VAULT_FIELDS.forEach(f => clear[f] = P[f]);
     P.vault = await sealJSON(clear);
   }
-  const out = { v:DB.v, active:DB.active, customDrugs: DB.customDrugs || [], profiles: DB.profiles.map(stripped) };
+  const out = { v:DB.v, active:DB.active, customDrugs: DB.customDrugs || [],
+                lastBackup: DB.lastBackup || null, profiles: DB.profiles.map(stripped) };
   localStorage.setItem(LS, JSON.stringify(out));
 }
 
@@ -2197,6 +2243,7 @@ function renderToday(){
   renderOverdose();
   renderStock();
   renderWater();
+  renderBackupNudge();
   $('#tdWarn').innerHTML = uniq.length ? (
     '<button class="mrow" id="warnBar" style="border-color:color-mix(in srgb,var(--danger) 32%,var(--line));'+
     'background:var(--danger-bg);margin-bottom:18px">'+
@@ -3232,6 +3279,23 @@ function renderSettings(){
   $('#notiAsk').style.display = ('Notification' in window && Notification.permission === 'default') ? '' : 'none';
 
   const op = $('#openProf'); if(op) op.onclick = profileSheet;
+  const dO = $('#dataOrigin');
+  if(dO) dO.textContent = location.origin + location.pathname.replace(/index\.html$/,'');
+  const ps = $('#persistState');
+  if(ps) ps.textContent = persistState === true
+    ? Lx('เปิดอยู่ เบราว์เซอร์จะไม่ล้างข้อมูลนี้ทิ้งเอง','On — the browser will not evict this data')
+    : persistState === false
+      ? Lx('เบราว์เซอร์ยังไม่ให้สิทธิ์ ให้ติดตั้งเป็นแอปบนหน้าจอโฮมแล้วเปิดใช้บ่อยขึ้น',
+           'Not granted yet — install to the home screen and use it regularly')
+      : Lx('เบราว์เซอร์นี้ไม่รองรับ','Not supported in this browser');
+  const sb = $('#shareBtn');
+  if(sb){ sb.classList.toggle('hide', !canShareFiles()); sb.onclick = shareBackup; }
+  const lb = $('#lastBackup');
+  if(lb){
+    const d = daysSince(DB.lastBackup);
+    lb.textContent = d === null ? Lx('ยังไม่เคยสำรอง','Never backed up')
+      : d === 0 ? Lx('วันนี้','Today') : Lx(d + ' วันก่อน', d + ' days ago');
+  }
   const lg = $('#legendRow'); if(lg) lg.onclick = legendSheet;
   const cd = $('#cdBtn');
   if(cd){
@@ -3377,16 +3441,57 @@ $('#bioOn').onclick = async () => {
 $('#chPin').onclick = () => setPinFlow(P, () => { save(); toast('เปลี่ยนรหัส PIN แล้ว'); }, true);
 
 /* ================= ข้อมูล ================= */
-$('#expBtn').onclick = () => {
-  const snap = { v:DB.v, active:DB.active, customDrugs: DB.customDrugs || [], profiles: DB.profiles.map(stripped) };
-  const blob = new Blob([JSON.stringify(snap, null, 2)], {type:'application/json'});
+/* ---- สำรองข้อมูล ---- */
+function backupSnapshot(){
+  return { v:DB.v, active:DB.active, customDrugs: DB.customDrugs || [],
+           origin: location.origin + location.pathname,
+           exportedAt: new Date().toISOString(),
+           app: 'iCareU',
+           profiles: DB.profiles.map(stripped) };
+}
+function backupFile(){
+  return new File([JSON.stringify(backupSnapshot(), null, 2)],
+                  'iCareU-backup-' + todayStr() + '.json', {type:'application/json'});
+}
+function markBackedUp(){
+  DB.lastBackup = new Date().toISOString();
+  save();
+  if(VIEW === 'today') renderToday();
+  if(VIEW === 'set') renderSettings();
+}
+/* เบราว์เซอร์บางตัวไม่ยอมให้แชร์ไฟล์ชนิดนี้ ต้องถามก่อนใช้ */
+function canShareFiles(){
+  try{
+    if(!navigator.share || !navigator.canShare) return false;
+    return navigator.canShare({files:[new File(['{}'], 'a.json', {type:'application/json'})]});
+  }catch(e){ return false; }
+}
+function downloadBackup(){
+  const f = backupFile();
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'iCareU-backup-' + todayStr() + '.json';
+  a.href = URL.createObjectURL(f);
+  a.download = f.name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-  toast('บันทึกไฟล์สำรองแล้ว');
-};
+  markBackedUp();
+  toast(Lx('บันทึกไฟล์สำรองแล้ว','Backup saved'));
+}
+async function shareBackup(){
+  if(!canShareFiles()){ downloadBackup(); return; }
+  const f = backupFile();
+  try{
+    await navigator.share({ files:[f], title:'iCareU',
+      text: Lx('ไฟล์สำรองข้อมูล iCareU วันที่ ' + fmtDate(todayStr()),
+               'iCareU backup from ' + fmtDate(todayStr())) });
+    markBackedUp();
+    toast(Lx('ส่งไฟล์สำรองแล้ว','Backup sent'));
+  }catch(e){
+    if(e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+    downloadBackup();
+  }
+}
+function exportBackup(){ canShareFiles() ? shareBackup() : downloadBackup(); }
+$('#expBtn').onclick = downloadBackup;
 $('#impBtn').onclick = () => $('#impFile').click();
 $('#impFile').onchange = function(){
   const f = this.files[0]; if(!f) return;
@@ -3531,6 +3636,10 @@ function setPinFlow(profile, done, isChange){
   drawLenPicker(); setPinMsg(); drawDots(0); buildKeys();
 }
 function lockNow(){
+  /* หน้าต่างเตือนและแผ่นที่เปิดค้างต้องปิดก่อนล็อก ไม่อย่างนั้นจะลอยอยู่เหนือหน้าล็อกและเห็นชื่อยาได้ */
+  closeSheet(); $('#sheetBody').innerHTML = '';
+  $('#alarm').classList.remove('on'); $('#alarmBody').innerHTML = '';
+  alarmQueue = []; alarmCur = null;
   if(P) sealProfile(P);
   P = DB.profiles.find(p => p.id === DB.active) || DB.profiles[0];
   if(!P) return firstRun();
@@ -3579,6 +3688,7 @@ function showApp(){
   if(!window.__cdTick) window.__cdTick = setInterval(updateCountdowns, 1000);
   tick();
   resetIdle();
+  askPersist().then(() => { if(VIEW === 'set') renderSettings(); });
   if('Notification' in window && Notification.permission === 'default'){
     setTimeout(() => {
       if(Notification.permission === 'default')
@@ -3935,7 +4045,7 @@ const EN_DOW_S = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 const DICT = {
 /* nav + chrome */
 'วันนี้':'Today','รายการ':'List','ปฏิทิน':'Calendar','ตรวจคู่ยา':'Interactions','ตั้งค่า':'Settings',
-'iCareU — บันทึกยาและอาหารเสริม':'iCareU — medication and supplement tracker',
+
 'บันทึกยาและอาหารเสริมที่ต้องกินเป็นเวลา':'Track the medicines and supplements you take on a schedule',
 'ตอนนี้':'Now','ปิด':'Close','บันทึก':'Save','ลบ':'Delete','เพิ่ม':'Add','แก้ไข':'Edit','ค้นหา':'Search',
 'ยกเลิก':'Cancel','ตกลง':'OK','เปลี่ยน':'Change','สลับไป':'Switch to','อนุญาต':'Allow','ทั้งหมด':'All',
@@ -4088,6 +4198,11 @@ const DICT = {
 'ชื่อ ไอคอน ข้อมูลร่างกาย และการสลับผู้ใช้ ย้ายไปอยู่ที่ปุ่มโปรไฟล์มุมบนซ้ายแล้ว':'Name, icon, body details and profile switching now live behind the profile button in the top left',
 'เข้ารหัสไว้ · ':'Encrypted · ','ชื่อรายการน้ำดื่ม':'Water item name','ดื่มครั้งละ':'Amount per serving','เช่น ดื่มช้า ๆ ไม่รวดเดียว':'e.g. sip slowly rather than all at once','เวลาที่ต้องดื่ม':'Times to drink',
 'เริ่มวันที่':'Start date','ถึงวันที่ (ถ้ามี)':'End date (optional)','เช่น น้ำเปล่า 1 แก้ว':'e.g. Water, one glass',
+'ส่งไปเก็บที่ Drive หรือแอปอื่น':'Send a backup to Drive or another app',
+'ส่งไฟล์สำรองแล้ว':'Backup sent','ที่อยู่เว็บของข้อมูลชุดนี้':'Web address this data belongs to',
+'พื้นที่เก็บข้อมูลถาวร':'Persistent storage','กำลังตรวจสอบ':'Checking',
+'สำรองข้อมูลล่าสุด':'Last backup','ยังไม่เคยสำรอง':'Never backed up','วันนี้':'Today',
+'เคยใช้มาก่อน กู้จากไฟล์สำรอง':'Used it before? Restore from a backup file',
 'คำถามกู้รหัส':'Recovery question','ยังไม่ได้ตั้ง':'Not set yet','ตั้งคำถาม':'Set one',
 'เข้ารหัสข้อมูล':'Encrypt your data','ยังไม่ได้เข้ารหัส':'Not encrypted','ปลดล็อกด้วยใบหน้า':'Unlock with your face','ปลดล็อกด้วยใบหน้าหรือลายนิ้วมือ':'Unlock with face or fingerprint',
 'กำลังตรวจสอบอุปกรณ์':'Checking this device','เลือกได้ 4 หรือ 6 หลัก':'Choose 4 or 6 digits',
@@ -4354,6 +4469,7 @@ function firstRun(){
   box.innerHTML = '<div class="fld"><label class="fl">เรียกคุณว่าอะไรดี</label>'+
     '<input id="frName" placeholder="ชื่อของคุณ" autocomplete="name"></div>'+
     '<button class="btn full" id="frGo">เริ่มใช้งาน</button>'+
+    '<button class="btn ghost full sm" id="frRestore" style="margin-top:9px">เคยใช้มาก่อน กู้จากไฟล์สำรอง</button>'+
     '<p style="font-size:12.5px;color:var(--ink-3);margin:16px 0 0;line-height:1.6;text-align:center">'+
     'ข้อมูลทั้งหมดเก็บไว้ในเบราว์เซอร์เครื่องนี้ ไม่ถูกส่งออกไปที่ไหน</p>';
   $('#lkKeys').replaceWith(box); box.id = 'lkKeys';
@@ -4367,6 +4483,7 @@ function firstRun(){
       setTimeout(() => { go('meds'); medEditor(null); }, 400);
     });
   };
+  $('#frRestore').onclick = () => $('#impFile').click();
   setTimeout(() => { const e = $('#frName'); if(e) e.focus(); }, 200);
 }
 function migrate(){
