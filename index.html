@@ -4,16 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#128A6E">
-<title>iCare — บันทึกยาและอาหารเสริม</title>
+<title>iCareU — บันทึกยาและอาหารเสริม</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="icon-180.png">
-<meta name="apple-mobile-web-app-title" content="iCare">
-<meta name="application-name" content="iCare">
+<meta name="apple-mobile-web-app-title" content="iCareU">
+<meta name="application-name" content="iCareU">
 <link rel="manifest" href="manifest.json">
 <style>
 /* ============================================================
-   iCare — design tokens
+   iCareU — design tokens
    ============================================================ */
 :root{
   --paper:#F5F7F8;
@@ -402,7 +402,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 <!-- ============ LOCK SCREEN ============ -->
 <div id="lock">
   <div class="lav" id="lkAv">🧑</div>
-  <h1 id="lkName">iCare</h1>
+  <h1 id="lkName">iCareU</h1>
   <p id="lkMsg">ใส่รหัส PIN เพื่อเข้าใช้งาน</p>
   <div class="seg hide" id="lkLen" style="max-width:230px;width:100%;margin:0 0 18px">
     <button data-n="4">4 หลัก</button>
@@ -600,9 +600,19 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
         <div class="g"><b>เสียงเตือน</b><span>เสียงสั้น ๆ พร้อมการสั่น</span></div>
         <button class="sw" id="soundOn"></button>
       </div>
-      <div class="row">
-        <div class="g"><b>เตือนซ้ำเมื่อเลยเวลา</b><span>เตือนอีกครั้งทุก 10 นาที จนกว่าจะบันทึก</span></div>
-        <button class="sw" id="nagOn"></button>
+      <div class="fld" style="margin:14px 0 0">
+        <label class="fl">เตือนซ้ำเมื่อเลยเวลา</label>
+        <div class="seg" id="nagSeg">
+          <button data-v="0">ไม่เตือนซ้ำ</button>
+          <button data-v="5">5 นาที</button>
+          <button data-v="10">10 นาที</button>
+        </div>
+        <div class="seg" id="nagSeg2" style="margin-top:6px">
+          <button data-v="15">15 นาที</button>
+          <button data-v="30">ครึ่งชั่วโมง</button>
+          <button data-v="60">1 ชั่วโมง</button>
+        </div>
+        <p class="src" style="margin-top:8px">เตือนซ้ำจนกว่าจะกดว่ากินแล้วหรือข้ามมื้อนี้</p>
       </div>
       <button class="btn ghost full sm" id="testNoti" style="margin-top:12px">ทดสอบการเตือน</button>
     </div>
@@ -696,7 +706,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 <script>
 "use strict";
 /* ================================================================
-   iCare — บันทึกยาและอาหารเสริม
+   iCareU — บันทึกยาและอาหารเสริม
    single-file / localStorage / offline
    ================================================================ */
 
@@ -1487,7 +1497,7 @@ function newProfile(name, emoji){
     id:uid(), name:name, emoji:emoji||'🧑',
     pin:null, salt:null,
     body:{sex:'', birth:null, weight:null, height:null, pregnant:false},
-    settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:1, autoLock:5, lang:'th', dateFmt:'dmy' },
+    settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:10, autoLock:5, lang:'th', dateFmt:'dmy' },
     meds:[], logs:{}, notified:{}, snoozes:{}
   };
 }
@@ -2939,8 +2949,8 @@ function tick(){
       const k = notiKey(ds, d.med, d.time, 'due');
       /* เปิดแอปตอนดึกแล้วมีของค้างทั้งวัน ไม่ควรเด้งทีละอัน — เกิน 2 ชม. ให้เห็นบนรางเวลาแทน */
       if(!P.notified[k]){ P.notified[k] = 1; if(nowMin - tm <= 120) due.push({ d:d, kind:'due' }); }
-      else if(P.settings.nag && nowMin > tm && (nowMin - tm) % 10 === 0){
-        const nk = notiKey(ds, d.med, d.time, 'nag' + Math.floor((nowMin - tm)/10));
+      else if(+P.settings.nag && nowMin > tm && (nowMin - tm) % +P.settings.nag === 0){
+        const nk = notiKey(ds, d.med, d.time, 'nag' + Math.floor((nowMin - tm) / +P.settings.nag));
         if(!P.notified[nk]){ P.notified[nk] = 1; due.push({ d:d, kind:'late' }); }
       }
     }
@@ -3041,7 +3051,7 @@ async function bioRegister(){
   const salt = crypto.getRandomValues(new Uint8Array(32));
   const cred = await navigator.credentials.create({ publicKey:{
     challenge: ch,
-    rp:{ name:'iCare' },
+    rp:{ name:'iCareU' },
     user:{ id: uid8, name: (P.name || 'user') + '@' + P.id, displayName: P.name || 'user' },
     pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
     authenticatorSelection:{ authenticatorAttachment:'platform', userVerification:'required', residentKey:'preferred' },
@@ -3164,7 +3174,14 @@ function renderSettings(){
   $('#custState').textContent = s.customOn ? 'กำลังใช้สี ' + (s.custom || '') : 'ปิดอยู่';
   $('#darkOn').classList.toggle('on', !!s.dark);
   $('#soundOn').classList.toggle('on', !!s.sound);
-  $('#nagOn').classList.toggle('on', !!s.nag);
+  $$('#nagSeg button, #nagSeg2 button').forEach(b => {
+    b.classList.toggle('on', +b.dataset.v === (+s.nag || 0));
+    b.onclick = () => {
+      P.settings.nag = +b.dataset.v; save(); renderSettings();
+      toast(+b.dataset.v ? Lx('เตือนซ้ำทุก ' + b.textContent, 'Repeats every ' + b.textContent)
+                         : Lx('ปิดการเตือนซ้ำแล้ว','Repeat reminders off'));
+    };
+  });
   $$('#leadSeg button').forEach(b => b.classList.toggle('on', +b.dataset.v === s.lead));
   $$('#langSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === LANG));
   $$('#dateSeg button, #dateSeg2 button').forEach(b => {
@@ -3229,7 +3246,6 @@ $('#custOn').onclick = () => { P.settings.customOn = P.settings.customOn ? 0 : 1
 $('#custColor').oninput = function(){ P.settings.custom = this.value; P.settings.customOn = 1; save(); applyTheme(); renderSettings(); };
 $('#darkOn').onclick = () => { P.settings.dark = P.settings.dark ? 0 : 1; save(); applyTheme(); renderSettings(); };
 $('#soundOn').onclick = () => { P.settings.sound = P.settings.sound ? 0 : 1; save(); renderSettings(); if(P.settings.sound) beep(); };
-$('#nagOn').onclick = () => { P.settings.nag = P.settings.nag ? 0 : 1; save(); renderSettings(); };
 $$('#leadSeg button').forEach(b => b.onclick = () => { P.settings.lead = +b.dataset.v; save(); renderSettings(); toast('เตือนล่วงหน้า ' + (b.dataset.v === '0' ? 'ตรงเวลา' : b.dataset.v + ' นาที')); });
 $('#autoLock').onchange = function(){ P.settings.autoLock = +this.value; save(); resetIdle(); };
 $('#notiAsk').onclick = async () => {
@@ -3366,7 +3382,7 @@ $('#expBtn').onclick = () => {
   const blob = new Blob([JSON.stringify(snap, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'iCare-backup-' + todayStr() + '.json';
+  a.download = 'iCareU-backup-' + todayStr() + '.json';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
   toast('บันทึกไฟล์สำรองแล้ว');
@@ -3816,7 +3832,7 @@ function infoSheet(tags, title, titleEn, onUse, selfId, back){
   const sec = (label, arr, cls) => !arr || !arr.length ? '' :
     '<div class="isec ' + (cls||'') + '"><b>' + label + '</b><ul>' + arr.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
 
-  openSheet('<div class="shd"><b>' + esc(title) + '</b><button class="btn sm ghost" onclick="closeSheet()">ปิด</button></div>'+
+  openSheet('<div class="shd"><b>' + esc(title) + '</b><button class="btn sm ghost" onclick="dismissSheet()">' + Lx('ปิด','Close') + '</button></div>'+
     (titleEn ? '<p style="font-size:13px;color:var(--ink-3);margin:-8px 0 14px">' + esc(titleEn) + '</p>' : '')+
     (onUse ? '<button class="btn full" id="ifUse" style="margin-bottom:16px">' + Lx('ใช้รายการนี้','Use this item') + '</button>' : '')+
     pairsBlock(tags, selfId)+
@@ -3919,7 +3935,7 @@ const EN_DOW_S = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 const DICT = {
 /* nav + chrome */
 'วันนี้':'Today','รายการ':'List','ปฏิทิน':'Calendar','ตรวจคู่ยา':'Interactions','ตั้งค่า':'Settings',
-'iCare — บันทึกยาและอาหารเสริม':'iCare — medication and supplement tracker',
+'iCareU — บันทึกยาและอาหารเสริม':'iCareU — medication and supplement tracker',
 'บันทึกยาและอาหารเสริมที่ต้องกินเป็นเวลา':'Track the medicines and supplements you take on a schedule',
 'ตอนนี้':'Now','ปิด':'Close','บันทึก':'Save','ลบ':'Delete','เพิ่ม':'Add','แก้ไข':'Edit','ค้นหา':'Search',
 'ยกเลิก':'Cancel','ตกลง':'OK','เปลี่ยน':'Change','สลับไป':'Switch to','อนุญาต':'Allow','ทั้งหมด':'All',
@@ -4025,8 +4041,10 @@ const DICT = {
 'แจ้งเตือนของระบบ':'System notifications','ยังไม่ได้อนุญาต':'Not allowed yet','อนุญาตแล้ว':'Allowed',
 'ถูกปฏิเสธ ต้องเปิดในตั้งค่าเบราว์เซอร์':'Blocked — turn it on in your browser settings',
 'เบราว์เซอร์นี้ไม่รองรับ':'Not supported in this browser','เสียงเตือน':'Reminder sound',
-'เสียงสั้น ๆ พร้อมการสั่น':'A short chime with vibration','เตือนซ้ำเมื่อเลยเวลา':'Repeat when overdue',
-'เตือนอีกครั้งทุก 10 นาที จนกว่าจะบันทึก':'Reminds again every 10 minutes until you record it',
+'เสียงสั้น ๆ พร้อมการสั่น':'A short chime with vibration','เตือนซ้ำเมื่อเลยเวลา':'Repeat when overdue','ไม่เตือนซ้ำ':'No repeat',
+'ครึ่งชั่วโมง':'30 minutes','1 ชั่วโมง':'1 hour',
+'เตือนซ้ำจนกว่าจะกดว่ากินแล้วหรือข้ามมื้อนี้':'Keeps reminding until you mark it taken or skipped',
+'ปิดการเตือนซ้ำแล้ว':'Repeat reminders off',
 'ทดสอบการเตือน':'Send a test reminder','ทดสอบการเตือน':'Test reminder',
 'ถ้าเห็นข้อความนี้ แปลว่าการเตือนใช้งานได้':'If you can see this, reminders are working.',
 'คำอธิบายสัญลักษณ์':'Symbol guide','ไอคอนและป้ายสีต่าง ๆ ในแอปหมายถึงอะไร':'What the icons and coloured labels mean',
@@ -4323,7 +4341,7 @@ function firstRun(){
   $('#app').style.display = 'none';
   $('#lock').style.display = 'flex';
   $('#lkAv').textContent = '💊';
-  $('#lkName').textContent = 'iCare';
+  $('#lkName').textContent = 'iCareU';
   $('#lkMsg').textContent = 'บันทึกยาและอาหารเสริมที่ต้องกินเป็นเวลา';
   $('#lkDots').innerHTML = '';
   $('#lkKeys').innerHTML = '';
@@ -4353,7 +4371,10 @@ function firstRun(){
 }
 function migrate(){
   DB.profiles.forEach(p => {
-    p.settings = Object.assign({theme:'pandan',dark:0,custom:null,customOn:0,lead:5,sound:1,nag:1,autoLock:5,lang:'th',dateFmt:'dmy'}, p.settings||{});
+    p.settings = Object.assign({theme:'pandan',dark:0,custom:null,customOn:0,lead:5,sound:1,nag:10,autoLock:5,lang:'th',dateFmt:'dmy'}, p.settings||{});
+    if(p.settings.nag === true) p.settings.nag = 10;
+    if(p.settings.nag === false) p.settings.nag = 0;
+    p.settings.nag = +p.settings.nag || 0;
     p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false}, p.body || {});
     p.logs = p.logs || {}; p.notified = p.notified || {}; p.snoozes = p.snoozes || {}; p.meds = p.meds || [];
     p.meds.forEach(m => {
