@@ -458,6 +458,7 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
       </div>
     </div>
     <div id="tdWarn"></div>
+    <div id="tdAllergy"></div>
     <div id="tdCond"></div>
     <div id="tdDose"></div>
     <div id="tdStock"></div>
@@ -546,10 +547,16 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
     <h2 class="vt">โรคประจำตัวและยาของคุณ</h2>
     <p class="vs">ระบุโรคที่เป็นอยู่ แล้วระบบจะตรวจให้ว่ายาที่กินอยู่มีตัวไหนต้องระวัง</p>
     <div class="card">
+      <h3>ยาที่แพ้</h3>
+      <p class="h">ระบบจะเตือนทันทีถ้ามีรายการยาที่ตรงกัน</p>
+      <div class="tagpick" id="allergyChips" style="margin-bottom:12px"></div>
+      <button class="btn ghost full sm" id="allergyEdit">ระบุยาที่แพ้</button>
+    </div>
+    <div class="card">
       <h3>โรคประจำตัวของฉัน</h3>
       <p class="h">แตะที่ชื่อโรคเพื่อดูแนวทาง</p>
       <div class="tagpick" id="condChips" style="margin-bottom:12px"></div>
-      <button class="btn ghost full sm" id="condEdit">เลือกหรือแก้ไขโรคประจำตัว</button>
+      <button class="btn ghost full sm" id="condEdit">ระบุหรือแก้ไขโรคประจำตัว</button>
     </div>
     <div id="healthBody"></div>
   </section>
@@ -825,6 +832,12 @@ Object.assign(TAGS, {
   coq10:{th:'โคเอนไซม์คิวเท็น', en:'Coenzyme Q10', kw:['คิวเท็น','coq10','coenzyme q','ubiquinol','ยูบิควินอล']},
   collagen:{th:'คอลลาเจน', en:'Collagen', kw:['คอลลาเจน','collagen']},
   allopurinol:{th:'ยาลดกรดยูริก', en:'Allopurinol / Febuxostat', kw:['allopurinol','อัลโลพูรินอล','febuxostat','ยาเกาต์','กรดยูริก']},
+  methotrexate:{th:'เมโทเทรกเซต', en:'Methotrexate', kw:['methotrexate','เมโทเทรกเซต','mtx','trexall']},
+  levodopa:{th:'ลีโวโดปา', en:'Levodopa', kw:['levodopa','ลีโวโดปา','madopar','sinemet','carbidopa','benserazide']},
+  lithium:{th:'ลิเทียม', en:'Lithium', kw:['lithium','ลิเทียม','quilonum']},
+  antipsychotic:{th:'ยาต้านโรคจิต', en:'Antipsychotics', kw:['haloperidol','risperidone','olanzapine','quetiapine','ฮาโลเพอริดอล','ริสเพอริโดน','ยาต้านโรคจิต']},
+  arv:{th:'ยาต้านไวรัสเอชไอวี', en:'Antiretrovirals', kw:['tenofovir','efavirenz','dolutegravir','lamivudine','arv','ยาต้านไวรัส','biktarvy','ทีโนโฟเวียร์']},
+  rifampicin:{th:'ไรแฟมพิซิน (ยาวัณโรค)', en:'Rifampicin', kw:['rifampicin','rifampin','ไรแฟมพิซิน','isoniazid','ยาวัณโรค','ethambutol','pyrazinamide']},
   steroid:{th:'ยาสเตียรอยด์', en:'Corticosteroids', kw:['prednisolone','dexamethasone','เพรดนิโซโลน','สเตียรอยด์','steroid','เดกซาเมทาโซน']}
 });
 
@@ -1253,10 +1266,8 @@ function renderBackupNudge(){
       (d === null ? Lx('ยังไม่เคยสำรองข้อมูลเลย','You have never backed up')
                   : Lx('สำรองข้อมูลครั้งล่าสุดเมื่อ ' + d + ' วันก่อน','Last backup was ' + d + ' days ago')) + '</span>'+
     '<span class="tt" style="color:var(--warn);opacity:.85">' +
-      (canShareFiles()
-        ? Lx('แตะเพื่อส่งไฟล์สำรองไปเก็บที่ Drive หรือแอปอื่น','Tap to send a backup to Drive or another app')
-        : Lx('ข้อมูลอยู่ในเบราว์เซอร์เท่านั้น ถ้าเปลี่ยนที่อยู่เว็บหรือล้างข้อมูลจะหายหมด',
-             'Everything lives in this browser — changing the web address or clearing data wipes it')) + '</span></span>'+
+      Lx('แตะเพื่อสำรองข้อมูล ข้อมูลอยู่ในเบราว์เซอร์เท่านั้น ถ้าเปลี่ยนที่อยู่เว็บหรือล้างข้อมูลจะหายหมด',
+         'Tap to back up. Everything lives in this browser — changing the web address or clearing data wipes it') + '</span></span>'+
     '<svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;stroke:var(--warn);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M9 18l6-6-6-6"/></svg></button>';
   $('#bkBar').onclick = () => { exportBackup(); };
 }
@@ -1545,7 +1556,7 @@ function newProfile(name, emoji){
   return {
     id:uid(), name:name, emoji:emoji||'🧑',
     pin:null, salt:null,
-    body:{sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[]},
+    body:{sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[]},
     settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:10, autoLock:5, lang:'th', dateFmt:'dmy' },
     meds:[], logs:{}, notified:{}, snoozes:{}
   };
@@ -1950,16 +1961,30 @@ function conditionPicker(back){
 function renderHealth(){
   const conds = myConditions();
   const host = $('#healthBody'); if(!host) return;
+  const al = myAllergies();
+  $('#allergyChips').innerHTML = al.length
+    ? al.map(a => '<button class="on" style="background:var(--danger);border-color:var(--danger)">⚠️ ' + esc(a.label) + '</button>').join('')
+    : '<span style="font-size:13px;color:var(--ink-3)">' + Lx('ยังไม่ได้ระบุยาที่แพ้','No allergies recorded yet') + '</span>';
+  $$('#allergyChips button').forEach(b => b.onclick = () => allergySheet(() => go('health')));
   $('#condChips').innerHTML = conds.length
     ? conds.map(c => '<button data-oc="' + c.id + '">' + esc(condName(c)) + '</button>').join('')
     : '<span style="font-size:13px;color:var(--ink-3)">' + Lx('ยังไม่ได้ระบุโรคประจำตัว','No conditions set yet') + '</span>';
   $$('#condChips [data-oc]').forEach(b => b.onclick = () => condSheet(condById(b.dataset.oc)));
 
+  const alHits = allergyChecks();
+  const alCard = alHits.length
+    ? '<div class="card" style="border-color:var(--danger);background:var(--danger-bg)">'+
+      '<h3 style="color:var(--danger)">' + Lx('ยาที่ตรงกับสิ่งที่คุณแพ้','Matches a medicine you are allergic to') + '</h3>'+
+      '<p class="h" style="color:var(--danger)">' + Lx('หยุดและถามแพทย์หรือเภสัชกรก่อนกินทุกครั้ง','Stop and ask a doctor or pharmacist before taking any of these') + '</p>'+
+      alHits.map(x => '<div class="pairrow high" style="background:var(--card)">'+
+        '<div class="hd"><b>' + esc(x.med.name) + '</b><span class="sev high">' + Lx('ตรงกับยาที่แพ้','allergy match') + '</span></div>'+
+        '<p class="do">' + Lx('ตรงกับ ','Matches ') + esc(x.allergies.map(a => a.label).join(', ')) + '</p></div>').join('') + '</div>'
+    : '';
   if(!conds.length){
-    host.innerHTML = '<div class="empty"><div class="big">🩺</div>'+
+    host.innerHTML = alCard + '<div class="empty"><div class="big">🩺</div>'+
       '<p>' + Lx('ระบุโรคประจำตัวแล้วระบบจะตรวจให้ว่ายาที่คุณกินอยู่มีตัวไหนที่ต้องระวัง',
                  'Add your conditions and the app will flag medicines that need care') + '</p>'+
-      '<button class="btn" id="hEmpty">' + Lx('เลือกโรคประจำตัว','Choose your conditions') + '</button></div>';
+      '<button class="btn" id="hEmpty">' + Lx('ระบุโรคประจำตัว','Set your conditions') + '</button></div>';
     $('#hEmpty').onclick = () => conditionPicker(() => go('health'));
     return;
   }
@@ -1969,7 +1994,7 @@ function renderHealth(){
   const gaps = checks.filter(x => x.kind === 'gap');
   const sevTx = {high:Lx('ต้องระวังมาก','Take great care'), mod:Lx('ควรระวัง','Take care'), low:Lx('ข้อมูล','Note')};
 
-  host.innerHTML =
+  host.innerHTML = alCard +
     '<div class="card" style="border-color:' + (bad.length ? 'color-mix(in srgb,var(--danger) 26%,var(--line))' : 'var(--line)') + '">'+
       '<h3>' + Lx('ยาที่ใช้อยู่กับโรคของคุณ','Your medicines against your conditions') + '</h3>'+
       '<p class="h">' + (bad.length
@@ -2064,6 +2089,117 @@ function renderCondAlert(){
   $('#cdBar').onclick = () => go('health');
 }
 
+
+/* ================================================================
+   ยาที่แพ้
+   ================================================================ */
+function myAllergies(){ return (P.body && P.body.allergies) || []; }
+/* หายาที่ตรงกับสิ่งที่แพ้ ทั้งจากสารสำคัญและจากชื่อ */
+function allergyHits(med){
+  const tags = medTags(med);
+  const name = ((med.name || '') + ' ' + (med.nameEn || '')).toLowerCase();
+  return myAllergies().filter(a => {
+    if((a.tags || []).some(t => tags.includes(t))) return true;
+    const l = String(a.label || '').trim().toLowerCase();
+    return l.length > 2 && name.indexOf(l) >= 0;
+  });
+}
+function allergyChecks(){
+  const out = [];
+  (P.meds || []).filter(m => m.active).forEach(m => {
+    const hits = allergyHits(m);
+    if(hits.length) out.push({med:m, allergies:hits});
+  });
+  return out;
+}
+
+/* ---- แผ่นระบุยาที่แพ้ ---- */
+function allergySheet(back){
+  const draw = () => {
+    const list = myAllergies();
+    $('#alBody').innerHTML =
+      '<p style="font-size:13px;color:var(--ink-2);margin:0 0 14px;line-height:1.65">' +
+      Lx('ระบุยาหรือสารที่เคยแพ้ ระบบจะเตือนทันทีถ้ามีรายการยาที่ตรงกัน ทั้งจากชื่อและจากตัวยาสำคัญ เช่น ระบุว่าแพ้แบคทริม แล้วเพิ่มยาโคไตรม็อกซาโซลชนิดอื่น ระบบก็จับได้',
+         'List anything you have reacted to. The app flags matching items by name and by active ingredient — so recording Bactrim also catches other co-trimoxazole products.') + '</p>'+
+      '<div class="fld"><label class="fl">' + Lx('ชื่อยาหรือสารที่แพ้','Medicine or substance') + '</label>'+
+      '<input id="alQ" autocomplete="off" placeholder="' + Lx('พิมพ์ชื่อ เช่น เพนนิซิลลิน แบคทริม หรือ Ibuprofen','Type a name, e.g. penicillin, Bactrim or ibuprofen') + '">'+
+      '<div class="tagpick" id="alSug" style="margin-top:8px"></div></div>'+
+      '<button class="btn ghost sm full" id="alAdd" style="margin-bottom:16px">' + Lx('เพิ่มชื่อที่พิมพ์ไว้','Add what I typed') + '</button>'+
+      (list.length
+        ? list.map((a,i) => '<div class="mrow" style="align-items:center">'+
+            '<span class="pill" style="background:var(--danger-bg)">⚠️</span>'+
+            '<span class="bd"><span class="nm">' + esc(a.label) + '</span>'+
+            '<span class="tt">' + ((a.tags || []).length
+                ? (a.tags || []).map(t => esc(TAGS[t] ? Lx(TAGS[t].th, TAGS[t].en) : t)).join(', ')
+                : Lx('จับคู่จากชื่อเท่านั้น','matched by name only')) + '</span></span>'+
+            '<button class="tick" data-rm="' + i + '"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button></div>').join('')
+        : '<div class="empty"><p>' + Lx('ยังไม่ได้ระบุยาที่แพ้','No allergies recorded yet') + '</p></div>');
+
+    const q = $('#alQ');
+    q.oninput = () => {
+      const v = q.value.trim();
+      const box = $('#alSug');
+      if(!v){ box.innerHTML = ''; return; }
+      const hits = searchDrugs(v, 6).filter(x => x.kind !== 'water');
+      box.innerHTML = hits.map((x,i) => '<button data-s="' + i + '">' + esc(drugLabel(x)) +
+        (x.brand ? '<span style="opacity:.55"> · ' + esc(LANG === 'en' ? x.gen : x.gth) + '</span>' : '') + '</button>').join('');
+      $$('#alSug [data-s]').forEach(b => b.onclick = () => {
+        const x = hits[+b.dataset.s];
+        addAllergy(x.th, x.tags || []);
+        draw();
+      });
+    };
+    $('#alAdd').onclick = () => {
+      const v = q.value.trim();
+      if(v.length < 2){ toast(Lx('พิมพ์ชื่อก่อน','Type a name first')); return; }
+      addAllergy(v, autoTags(v));
+      draw();
+    };
+    $$('#alBody [data-rm]').forEach(b => b.onclick = () => {
+      P.body.allergies.splice(+b.dataset.rm, 1); save(); draw();
+      if(VIEW === 'health') renderHealth();
+    });
+  };
+  openSheet('<div class="shd"><b>' + Lx('ยาที่แพ้','Medicines you are allergic to') + '</b>'+
+    '<button class="btn sm ghost" onclick="dismissSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    '<div id="alBody"></div>'+
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:14px 0 0;line-height:1.65">' +
+    Lx('การเตือนนี้อาศัยสิ่งที่คุณกรอกเท่านั้น ไม่ครอบคลุมการแพ้ข้ามกลุ่มยาทั้งหมด และไม่แทนบัตรแพ้ยาที่โรงพยาบาลออกให้ พกบัตรแพ้ยาติดตัวเสมอ',
+       'This only checks what you entered. It does not cover every cross-reactivity and does not replace the allergy card your hospital issued. Always carry that card.') + '</p>', back);
+  draw();
+}
+function addAllergy(label, tags){
+  P.body.allergies = P.body.allergies || [];
+  const l = String(label).trim();
+  if(!l) return;
+  if(P.body.allergies.some(a => a.label.toLowerCase() === l.toLowerCase())){
+    toast(Lx('มีอยู่ในรายการแล้ว','Already in the list')); return;
+  }
+  P.body.allergies.push({ label:l, tags:(tags || []).slice() });
+  save();
+  const q = $('#alQ'); if(q){ q.value = ''; }
+  const b = $('#alSug'); if(b) b.innerHTML = '';
+  toast(Lx('เพิ่ม ' + l + ' เข้ารายการยาที่แพ้แล้ว','Added ' + l + ' to your allergy list'));
+  if(VIEW === 'health') renderHealth();
+  if(VIEW === 'today') renderToday();
+}
+
+/* ---- แถบเตือนบนหน้าวันนี้ ---- */
+function renderAllergyAlert(){
+  const host = $('#tdAllergy'); if(!host) return;
+  const bad = allergyChecks();
+  if(!bad.length){ host.innerHTML = ''; return; }
+  host.innerHTML = '<button class="mrow" id="alBar" style="margin-bottom:18px;'+
+    'border-color:var(--danger);background:var(--danger-bg)">'+
+    '<span class="pill" style="background:color-mix(in srgb,var(--danger) 18%,transparent)">⚠️</span>'+
+    '<span class="bd"><span class="nm" style="color:var(--danger)">' +
+      Lx('มี ' + bad.length + ' รายการตรงกับยาที่คุณแพ้', bad.length + ' items match a medicine you are allergic to') + '</span>'+
+    '<span class="tt" style="color:var(--danger)">' +
+      esc(bad.map(x => x.med.name).join(', ')) + Lx(' — หยุดและถามแพทย์หรือเภสัชกรก่อนกิน',' — stop and ask a doctor or pharmacist first') + '</span></span>'+
+    '<svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;stroke:var(--danger);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M9 18l6-6-6-6"/></svg></button>';
+  $('#alBar').onclick = () => go('health');
+}
+
 /* ---- คำถามกู้รหัส ---- */
 async function setQuestion(qObj, answer){
   const salt = makeSalt();
@@ -2085,7 +2221,7 @@ async function checkAnswer(answer){
     DEK = w.key;
     const obj = await openJSON(P.vault);
     VAULT_FIELDS.forEach(f => { P[f] = obj[f] !== undefined ? obj[f] : (f === 'meds' ? [] : {}); });
-    P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[]}, P.body || {});
+    P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[]}, P.body || {});
     return true;
   }
   if(!P.ansHash || !P.ansSalt) return false;
@@ -2452,6 +2588,7 @@ function renderToday(){
   const uniq = conf.filter(c => { const k = [c.a.id,c.b.id,c.r.t].sort().join('|'); if(seen.has(k)) return false; seen.add(k); return true; });
   const nHigh = uniq.filter(c => c.r.sev === 'high').length;
   renderOverdose();
+  renderAllergyAlert();
   renderCondAlert();
   renderStock();
   renderWater();
@@ -2977,6 +3114,12 @@ function saveDraft(){
     if((d.avoid||[]).includes(m.id)){ m.avoid = m.avoid || []; if(!m.avoid.includes(d.id)) m.avoid.push(d.id); }
     else if((m.avoid||[]).includes(d.id)) m.avoid = m.avoid.filter(x => x !== d.id);
   });
+  const al = allergyHits(d);
+  if(al.length && !confirm(Lx(
+      'รายการนี้ตรงกับยาที่คุณระบุว่าแพ้ คือ ' + al.map(a => a.label).join(', ') +
+      '\n\nถ้าแพทย์เป็นผู้สั่งให้ใช้ ให้กดตกลงเพื่อบันทึกต่อ ถ้าไม่แน่ใจ ให้หยุดและถามเภสัชกรก่อน',
+      'This matches something you listed as an allergy: ' + al.map(a => a.label).join(', ') +
+      '\n\nIf a doctor prescribed it, press OK to continue. If you are unsure, stop and ask a pharmacist first.'))) return;
   const i = P.meds.findIndex(m => m.id === d.id);
   i >= 0 ? P.meds[i] = d : P.meds.push(d);
   save(); closeSheet(); renderMeds(); renderToday(); renderCheckPickers();
@@ -3386,7 +3529,7 @@ async function bioUnlock(auto){
       DEK = w.key;
       const obj = await openJSON(P.vault);
       VAULT_FIELDS.forEach(f => { P[f] = obj[f] !== undefined ? obj[f] : (f === 'meds' ? [] : {}); });
-      P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[]}, P.body || {});
+      P.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[]}, P.body || {});
     }
     enterApp();
   }catch(e){
@@ -3564,7 +3707,13 @@ function profileSheet(){
         (myConditions().length
           ? myConditions().map(c => '<button class="on">' + esc(condName(c)) + '</button>').join('')
           : '<span style="font-size:13px;color:var(--ink-3)">ยังไม่ได้ระบุ</span>') + '</div>'+
-        '<button class="btn ghost sm full" id="pCondBtn" style="margin-top:9px">เลือกโรคประจำตัว</button></div>'+
+        '<button class="btn ghost sm full" id="pCondBtn" style="margin-top:9px">ระบุโรคประจำตัว</button></div>'+
+      '<div class="fld"><label class="fl">ยาที่แพ้</label>'+
+        '<div class="tagpick">' +
+        (myAllergies().length
+          ? myAllergies().map(a => '<button class="on" style="background:var(--danger);border-color:var(--danger)">⚠️ ' + esc(a.label) + '</button>').join('')
+          : '<span style="font-size:13px;color:var(--ink-3)">ยังไม่ได้ระบุ</span>') + '</div>'+
+        '<button class="btn ghost sm full" id="pAlBtn" style="margin-top:9px">ระบุยาที่แพ้</button></div>'+
       (bmi ? '<div class="adv">ดัชนีมวลกาย ' + bmi.toFixed(1) + ' — ' +
         (bmi < 18.5 ? 'ต่ำกว่าเกณฑ์' : bmi < 23 ? 'อยู่ในเกณฑ์ปกติ' : bmi < 25 ? 'ท้วม' : bmi < 30 ? 'อ้วนระดับ 1' : 'อ้วนระดับ 2') +
         '<br><span style="font-size:12px;color:var(--ink-3)">เกณฑ์สำหรับผู้ใหญ่ชาวเอเชียตามคำแนะนำขององค์การอนามัยโลก ไม่ใช้กับเด็ก หญิงตั้งครรภ์ และนักกีฬา</span></div>' : '')+
@@ -3584,6 +3733,7 @@ function profileSheet(){
     $$('#pSex button').forEach(b => b.onclick = () => { sync(); B.sex = b.dataset.v; if(b.dataset.v !== 'f') B.pregnant = false; draw(); });
     const pg = $('#pPreg'); if(pg) pg.onclick = () => { sync(); B.pregnant = !B.pregnant; draw(); };
     const pc = $('#pCondBtn'); if(pc) pc.onclick = () => { sync(); conditionPicker(profileSheet); };
+    const pa = $('#pAlBtn'); if(pa) pa.onclick = () => { sync(); allergySheet(profileSheet); };
     window.__psync = sync;
   };
   const others = DB.profiles.filter(x => x.id !== P.id);
@@ -3705,11 +3855,22 @@ async function shareBackup(){
     markBackedUp();
     toast(Lx('ส่งไฟล์สำรองแล้ว','Backup sent'));
   }catch(e){
-    if(e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
-    downloadBackup();
+    if(e && e.name === 'AbortError') return;   /* ผู้ใช้กดยกเลิกเอง */
+    downloadBackup();                            /* กรณีอื่นให้ดาวน์โหลดแทน */
   }
 }
-function exportBackup(){ canShareFiles() ? shareBackup() : downloadBackup(); }
+/* บนคอมหลายเครื่องแชร์ไฟล์ไม่ได้ หรือแชร์ได้แต่ไม่มีปลายทางให้เลือก จึงให้เลือกเองชัด ๆ */
+function exportBackup(){
+  if(!canShareFiles()){ downloadBackup(); return; }
+  openSheet('<div class="shd"><b>' + Lx('สำรองข้อมูล','Back up your data') + '</b>'+
+    '<button class="btn sm ghost" onclick="closeSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    '<p style="font-size:13px;color:var(--ink-2);margin:0 0 16px;line-height:1.65">' +
+    Lx('ไฟล์เดียวกันทั้งสองแบบ เลือกวิธีที่สะดวกกว่า','Same file either way — pick whichever suits you') + '</p>'+
+    '<button class="btn full" id="bkShare">' + Lx('ส่งไปแอปอื่น เช่น Drive หรือ Files','Send to another app such as Drive or Files') + '</button>'+
+    '<button class="btn ghost full sm" id="bkDown" style="margin-top:9px">' + Lx('บันทึกเป็นไฟล์ลงเครื่อง','Save the file to this device') + '</button>');
+  $('#bkShare').onclick = () => { closeSheet(); setTimeout(shareBackup, 150); };
+  $('#bkDown').onclick = () => { closeSheet(); setTimeout(downloadBackup, 150); };
+}
 $('#expBtn').onclick = downloadBackup;
 $('#impBtn').onclick = () => $('#impFile').click();
 $('#impFile').onchange = function(){
@@ -4034,6 +4195,7 @@ $$('#medFilter button').forEach(b => b.onclick = () => {
   renderMeds();
 });
 $('#condEdit').onclick = () => conditionPicker(() => go('health'));
+$('#allergyEdit').onclick = () => allergySheet(() => go('health'));
 $('#btnAdd').onclick = () => medEditor(null);
 window.closeSheet = closeSheet;
 
@@ -4420,9 +4582,11 @@ const DICT = {
 'เปิดคลังยาส่วนตัว':'Open my drug library','เพิ่มเอง':'Added by me',
 'โรคประจำตัวและยาของคุณ':'Your conditions and your medicines',
 'ระบุโรคที่เป็นอยู่ แล้วระบบจะตรวจให้ว่ายาที่กินอยู่มีตัวไหนต้องระวัง':'List what you live with and the app will flag medicines that need care',
-'โรคประจำตัวของฉัน':'My conditions','แตะที่ชื่อโรคเพื่อดูแนวทาง':'Tap a condition for guidance',
-'เลือกหรือแก้ไขโรคประจำตัว':'Choose or edit your conditions','โรคประจำตัว':'Health conditions',
-'เลือกโรคประจำตัว':'Choose your conditions','ยังไม่ได้ระบุ':'Not set','สุขภาพ':'Health',
+'ยาที่แพ้':'Allergies','ระบุยาที่แพ้':'Record your allergies',
+'ระบบจะเตือนทันทีถ้ามีรายการยาที่ตรงกัน':'The app flags any matching item straight away',
+'ยังไม่ได้ระบุยาที่แพ้':'No allergies recorded yet','โรคประจำตัวของฉัน':'My conditions','แตะที่ชื่อโรคเพื่อดูแนวทาง':'Tap a condition for guidance',
+'ระบุหรือแก้ไขโรคประจำตัว':'Set or edit your conditions','โรคประจำตัว':'Health conditions',
+'ระบุโรคประจำตัว':'Set your conditions','ยังไม่ได้ระบุ':'Not set','สุขภาพ':'Health',
 'คู่ยา':'Pairs','โรคประจำตัวและการตรวจยากับโรค':'Your conditions and how your medicines fit them',
 'โปรไฟล์ของฉัน':'My profile','บันทึกข้อมูลส่วนตัว':'Save my details','สลับผู้ใช้':'Switch profile',
 'แต่ละคนมีรายการยา ประวัติ และรหัส PIN ของตัวเอง สลับแล้วต้องใส่รหัสของคนนั้น':'Each person keeps their own items, history and PIN. Switching asks for their PIN.',
@@ -4432,6 +4596,9 @@ const DICT = {
 'เข้ารหัสไว้ · ':'Encrypted · ','ชื่อรายการน้ำดื่ม':'Water item name','ดื่มครั้งละ':'Amount per serving','เช่น ดื่มช้า ๆ ไม่รวดเดียว':'e.g. sip slowly rather than all at once','เวลาที่ต้องดื่ม':'Times to drink',
 'เริ่มวันที่':'Start date','ถึงวันที่ (ถ้ามี)':'End date (optional)','เช่น น้ำเปล่า 1 แก้ว':'e.g. Water, one glass',
 'ส่งไปเก็บที่ Drive หรือแอปอื่น':'Send a backup to Drive or another app',
+'สำรองข้อมูล':'Back up your data','ไฟล์เดียวกันทั้งสองแบบ เลือกวิธีที่สะดวกกว่า':'Same file either way — pick whichever suits you',
+'ส่งไปแอปอื่น เช่น Drive หรือ Files':'Send to another app such as Drive or Files',
+'บันทึกเป็นไฟล์ลงเครื่อง':'Save the file to this device',
 'ส่งไฟล์สำรองแล้ว':'Backup sent','ที่อยู่เว็บของข้อมูลชุดนี้':'Web address this data belongs to',
 'พื้นที่เก็บข้อมูลถาวร':'Persistent storage','กำลังตรวจสอบ':'Checking',
 'สำรองข้อมูลล่าสุด':'Last backup','ยังไม่เคยสำรอง':'Never backed up','วันนี้':'Today',
@@ -4725,8 +4892,9 @@ function migrate(){
     if(p.settings.nag === true) p.settings.nag = 10;
     if(p.settings.nag === false) p.settings.nag = 0;
     p.settings.nag = +p.settings.nag || 0;
-    p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[]}, p.body || {});
+    p.body = Object.assign({sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[]}, p.body || {});
     if(!Array.isArray(p.body.conditions)) p.body.conditions = [];
+    if(!Array.isArray(p.body.allergies)) p.body.allergies = [];
     p.logs = p.logs || {}; p.notified = p.notified || {}; p.snoozes = p.snoozes || {}; p.meds = p.meds || [];
     p.meds.forEach(m => {
       m.freq = m.freq || {mode:'daily'};
