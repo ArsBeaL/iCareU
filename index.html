@@ -414,7 +414,13 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 .dlnav span{flex:1;text-align:center;line-height:1.3}
 .dlnav span b{display:block;font-size:15.5px;font-weight:660}
 .dlnav span i{font-style:normal;font-size:11.5px;color:var(--accent);font-weight:660}
-.scalerow{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.spark{width:100%;height:auto;display:block;margin:4px 0 8px;overflow:visible}
+.spark .ax{font-size:9px;fill:var(--ink-3);font-family:inherit}
+.streak{display:flex;align-items:center;gap:5px;margin:4px 0}
+.streak span{font-size:11.5px;color:var(--ink-3);width:64px;flex:none}
+.streak i{font-style:normal;font-size:16px;line-height:1;width:22px;text-align:center;color:var(--ink-3)}
+.scalerow{display:flex;gap:6px}
+.scalerow button{flex:1;min-width:0}
 .scalerow button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 2px;
   border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink-2)}
 .scalerow button i{font-style:normal;font-size:19px;line-height:1}
@@ -581,6 +587,11 @@ html[data-dark="1"] .scalerow button.on{color:#0E1419}
   <section class="view" id="v-health">
     <h2 class="vt">โรคประจำตัวและยาของคุณ</h2>
     <p class="vs">ระบุโรคที่เป็นอยู่ แล้วระบบจะตรวจให้ว่ายาที่กินอยู่มีตัวไหนต้องระวัง</p>
+    <div class="card" id="trendCard">
+      <h3>แนวโน้มย้อนหลัง</h3>
+      <p class="h">เลือกสิ่งที่อยากดู แล้วเลือกช่วงเวลา</p>
+      <div id="trendBody"></div>
+    </div>
     <div class="card">
       <h3>บันทึกประจำวัน</h3>
       <p class="h" id="dlSummary">น้ำหนัก ความดัน และชีพจร บันทึกย้อนหลังได้</p>
@@ -631,6 +642,14 @@ html[data-dark="1"] .scalerow button.on{color:#0E1419}
           <button data-v="imperial">ปอนด์ ฟุตนิ้ว</button>
         </div>
         <p class="src" style="margin-top:8px">ใช้กับน้ำหนัก ส่วนสูง และเส้นรอบเอว ส่วนขนาดยายังเป็นมิลลิกรัมและมิลลิลิตรเสมอ เพราะเป็นหน่วยสากลของยา</p>
+      </div>
+      <div class="fld" style="margin:14px 0 0">
+        <label class="fl">หน่วยผลตรวจเลือด</label>
+        <div class="seg" id="labSeg">
+          <button data-v="mgdl">มก./ดล.</button>
+          <button data-v="mmol">mmol/L</button>
+        </div>
+        <p class="src" style="margin-top:8px">ไทยและสหรัฐอเมริกาใช้ มก./ดล. ส่วนยุโรปและออสเตรเลียส่วนใหญ่ใช้ mmol/L ค่าที่เก็บไว้ไม่เปลี่ยน แปลงเฉพาะตอนแสดง</p>
       </div>
     </div>
 
@@ -757,6 +776,10 @@ html[data-dark="1"] .scalerow button.on{color:#0E1419}
       <div class="row">
         <div class="g"><b>บันทึกประจำวัน</b><span id="dailyState">เก็บน้ำหนัก ความดัน ชีพจร และการเคลื่อนไหวรายวัน</span></div>
         <button class="sw" id="dailyOn"></button>
+      </div>
+      <div class="row hide" id="cycleRow">
+        <div class="g"><b>ติดตามรอบเดือน</b><span id="cycleState">บันทึกวันที่มีประจำเดือนและคาดการณ์รอบถัดไป</span></div>
+        <button class="sw" id="cycleOn"></button>
       </div>
       <div class="row">
         <div class="g"><b>ขนาดบันทึกประจำวัน</b><span id="dailySize">—</span></div>
@@ -1632,7 +1655,7 @@ function newProfile(name, emoji){
     id:uid(), name:name, emoji:emoji||'🧑',
     pin:null, salt:null,
     body:{sex:'', birth:null, weight:null, height:null, pregnant:false, conditions:[], allergies:[], waist:null, activity:'light'},
-    settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:10, autoLock:5, lang:'th', dateFmt:'dmy', daily:1, units:'metric' },
+    settings:{ theme:'pandan', dark:0, custom:null, customOn:0, lead:5, sound:1, nag:10, autoLock:5, lang:'th', dateFmt:'dmy', daily:1, units:'metric', cycle:1, labUnits:'mgdl' },
     meds:[], logs:{}, notified:{}, snoozes:{}, daily:{}
   };
 }
@@ -2043,6 +2066,9 @@ function conditionPicker(back){
 function renderHealth(){
   const conds = myConditions();
   const host = $('#healthBody'); if(!host) return;
+  renderTrends();
+  const tc = $('#trendCard');
+  if(tc) tc.classList.toggle('hide', !P.settings.daily);
   const st = dailyStats();
   const ds = $('#dlSummary');
   if(ds) ds.textContent = st.days
@@ -2224,9 +2250,25 @@ function kgToDisp(kg){ return kg == null ? null : Math.round((isImperial() ? kg 
 function dispToKg(v){ return v == null ? null : (isImperial() ? Math.round(v / LB_PER_KG * 100) / 100 : v); }
 function cmToDisp(cm){ return cm == null ? null : Math.round((isImperial() ? cm / CM_PER_IN : cm) * 10) / 10; }
 function dispToCm(v){ return v == null ? null : (isImperial() ? Math.round(v * CM_PER_IN * 10) / 10 : v); }
-function convToDisp(kind, v){ return kind === 'mass' ? kgToDisp(v) : kind === 'len' ? cmToDisp(v) : v; }
-function convFromDisp(kind, v){ return kind === 'mass' ? dispToKg(v) : kind === 'len' ? dispToCm(v) : v; }
-function convUnitLabel(kind){ return kind === 'mass' ? wUnit() : kind === 'len' ? lUnit() : ''; }
+const LAB_KINDS = ['glu','chol','trig'];
+function convToDisp(kind, v){
+  if(kind === 'mass') return kgToDisp(v);
+  if(kind === 'len') return cmToDisp(v);
+  if(LAB_KINDS.includes(kind)) return labToDisp(kind, v);
+  return v;
+}
+function convFromDisp(kind, v){
+  if(kind === 'mass') return dispToKg(v);
+  if(kind === 'len') return dispToCm(v);
+  if(LAB_KINDS.includes(kind)) return labFromDisp(kind, v);
+  return v;
+}
+function convUnitLabel(kind){
+  if(kind === 'mass') return wUnit();
+  if(kind === 'len') return lUnit();
+  if(LAB_KINDS.includes(kind)) return labUnitLabel();
+  return '';
+}
 /* แสดงน้ำหนักและความยาวพร้อมหน่วย */
 function showMass(kg){ return kg == null ? '—' : kgToDisp(kg) + ' ' + wUnit(); }
 function showLen(cm){ return cm == null ? '—' : cmToDisp(cm) + ' ' + lUnit(); }
@@ -2370,6 +2412,10 @@ const DAILY_GROUPS = [
   {id:'food',   ic:'🍽️', custom:'food', th:'อาหารและโภชนาการ', en:'Food and nutrition'},
   {id:'sleep',  ic:'😴', th:'การนอนหลับ',       en:'Sleep'},
   {id:'move',   ic:'🚶', th:'การเคลื่อนไหว',     en:'Movement'},
+  {id:'mind',   ic:'🧠', th:'อารมณ์และความเครียด', en:'Mood and stress'},
+  {id:'cycle',  ic:'🌸', when:'cycle', th:'รอบเดือน', en:'Menstrual cycle'},
+  {id:'glu',    ic:'🩸', th:'น้ำตาลในเลือด',  en:'Blood glucose'},
+  {id:'lipid',  ic:'🧪', th:'ไขมันในเลือด',   en:'Blood lipids'},
   {id:'note',   ic:'📝', th:'บันทึกของวันนี้',   en:"Today's note"}
 ];
 const DAILY_FIELDS = [
@@ -2385,6 +2431,17 @@ const DAILY_FIELDS = [
   {g:'move', id:'steps',     type:'num', th:'จำนวนก้าว',        en:'Steps',          uth:'ก้าว',   uen:'steps', min:0, max:200000, step:100, ph:'6000'},
   {g:'move', id:'activeMin',  type:'num', th:'เวลาที่ขยับร่างกาย', en:'Active minutes', uth:'นาที',   uen:'min',   min:0, max:1440,   step:5,   ph:'30'},
   {g:'move', id:'activeKcal', type:'num', th:'แคลอรีจากกิจกรรม',  en:'Active calories',uth:'กิโลแคลอรี', uen:'kcal', min:0, max:10000, step:10, ph:'250'},
+  {g:'mind', id:'mood',   type:'scale', th:'อารมณ์วันนี้',   en:'Mood today',   opts:'MOOD_Q'},
+  {g:'mind', id:'stress', type:'scale', th:'ระดับความเครียด', en:'Stress level', opts:'STRESS_Q'},
+  {g:'cycle', id:'flow',  type:'scale', th:'ประจำเดือนวันนี้', en:'Flow today',   opts:'FLOW_Q'},
+  {g:'cycle', id:'cramp', type:'scale', th:'อาการปวดท้อง',    en:'Cramps',      opts:'CRAMP_Q'},
+  {g:'glu', id:'glucoseF',  type:'num', conv:'glu', th:'น้ำตาลอดอาหาร',   en:'Fasting glucose',   min:20, max:700, step:1, ph:'95'},
+  {g:'glu', id:'glucosePP', type:'num', conv:'glu', th:'หลังอาหาร 2 ชม.', en:'2 h after a meal',  min:20, max:700, step:1, ph:'130'},
+  {g:'glu', id:'hba1c',     type:'num',            th:'HbA1c',           en:'HbA1c', uth:'%', uen:'%', min:3, max:20, step:0.1, ph:'5.6'},
+  {g:'lipid', id:'ldl',  type:'num', conv:'chol', th:'LDL',                en:'LDL',   min:10, max:400, step:1, ph:'110'},
+  {g:'lipid', id:'hdl',  type:'num', conv:'chol', th:'HDL',                en:'HDL',   min:10, max:150, step:1, ph:'55'},
+  {g:'lipid', id:'trig', type:'num', conv:'trig', th:'ไตรกลีเซอไรด์',       en:'Triglycerides', min:20, max:2000, step:1, ph:'120'},
+  {g:'lipid', id:'chol', type:'num', conv:'chol', th:'คอเลสเตอรอลรวม',     en:'Total cholesterol', min:50, max:500, step:1, ph:'180'},
   {g:'note', id:'note', type:'text', th:'บันทึกเพิ่มเติม', en:'Note',
    ph:'เช่น วันนี้เวียนหัวตอนเช้า หรือ ลืมกินยามื้อเที่ยง'}
 ];
@@ -2394,8 +2451,12 @@ function dailyRows(fs, d){
   let out = '', buf = [];
   const flush = () => {
     if(!buf.length) return;
-    out += (buf.length > 1 ? '<div class="' + (buf.length >= 3 ? 'three' : 'two') + '">' : '') +
-           buf.join('') + (buf.length > 1 ? '</div>' : '');
+    const size = buf.length === 4 ? 2 : 3;   /* สี่ช่องแบ่งสองแถวสวยกว่าสามบวกหนึ่ง */
+    for(let i = 0; i < buf.length; i += size){
+      const part = buf.slice(i, i + size);
+      out += (part.length > 1 ? '<div class="' + (part.length >= 3 ? 'three' : 'two') + '">' : '') +
+             part.join('') + (part.length > 1 ? '</div>' : '');
+    }
     buf = [];
   };
   fs.forEach(f => {
@@ -2483,6 +2544,46 @@ function pruneDaily(){
 
 /* ---- หน้าจอบันทึกประจำวัน ---- */
 let dailyDate = null;
+/* วาดหนึ่งหมวดจากทะเบียน พร้อมช่องสำหรับคำใบ้ของหมวดนั้น */
+function groupHtml(g, d){
+  const fs = dailyFieldsOf(g.id);
+  if(!fs.length) return '';
+  return '<div class="card" style="box-shadow:none"><h3>' + g.ic + ' ' + esc(L2(g)) + '</h3>'+
+    dailyRows(fs, d)+
+    (g.id === 'vitals' ? '<div id="dlBp"></div>' : '')+
+    (g.id === 'body' ? '<div id="dlBody2"></div>' : '')+
+    (g.id === 'sleep' ? '<div id="dlSleep"></div>'+
+      '<p class="dn" style="margin-top:8px">' +
+      Lx('ระยะการนอนแบบละเอียด เช่น หลับลึกหรือหลับตื้น ต้องใช้อุปกรณ์สวมใส่วัด เว็บทำเองไม่ได้ จึงให้ให้คะแนนความรู้สึกตอนตื่นแทน',
+         'Detailed sleep stages need a wearable to measure. A web app cannot do it, so rate how you felt on waking instead.') + '</p>' : '')+
+    (g.id === 'glu' ? '<div id="dlGlu"></div>'+
+      '<p class="dn" style="margin-top:8px">' +
+      Lx('เกณฑ์อ้างอิงจากแนวทางเวชปฏิบัติสำหรับโรคเบาหวานของสมาคมโรคเบาหวานแห่งประเทศไทย ' +
+         'ค่าครั้งเดียวไม่ใช่การวินิจฉัย และเป้าหมายของแต่ละคนต่างกัน ต้องให้แพทย์เป็นผู้กำหนด',
+         'Reference ranges follow the Diabetes Association of Thailand guideline. ' +
+         'A single reading is not a diagnosis, and targets differ from person to person — your doctor sets yours.') + '</p>' : '')+
+    (g.id === 'lipid' ? '<div id="dlLipid"></div>'+
+      '<p class="dn" style="margin-top:8px">' +
+      Lx('เป้าหมายไขมันขึ้นกับความเสี่ยงโรคหัวใจของแต่ละคน ระบบใช้โรคประจำตัวที่คุณระบุไว้มาช่วยเลือกเป้าหมาย ' +
+         'แต่เป้าหมายจริงต้องมาจากแพทย์ที่ดูผลเลือดทั้งชุด',
+         'Lipid targets depend on your cardiovascular risk. The app uses the conditions you listed to pick one, ' +
+         'but your real target must come from the doctor reading your full results.') + '</p>' : '')+
+    (g.id === 'cycle' ? '<div id="dlCycle"></div>'+
+      '<p class="dn" style="margin-top:8px">' +
+      Lx('การคาดการณ์เป็นการประมาณจากสิ่งที่คุณบันทึกเองเท่านั้น รอบเดือนคลาดเคลื่อนได้จากหลายสาเหตุ ' +
+         'ห้ามใช้แทนวิธีคุมกำเนิด และไม่ใช้ตัดสินใจเรื่องการตั้งครรภ์',
+         'The estimate is based only on what you logged. Cycles shift for many reasons. ' +
+         'Do not use this as a contraceptive method or to make decisions about pregnancy.') + '</p>' : '')+
+    (g.id === 'mind' ? '<div id="dlMind"></div>'+
+      '<p class="dn" style="margin-top:8px">' +
+      Lx('ส่วนนี้ช่วยให้เห็นรูปแบบของตัวเอง ไม่ใช่แบบคัดกรองและไม่ใช่การวินิจฉัยโรค',
+         'This is here to help you see your own patterns. It is not a screening test and not a diagnosis.') + '</p>' : '')+
+    (g.id === 'move' ? '<div id="dlMove"></div>'+
+      '<p class="dn" style="margin-top:8px">' +
+      Lx('เว็บอ่านค่าจากนาฬิกาหรือแอปสุขภาพของเครื่องไม่ได้ ต้องดูตัวเลขจากที่นั่นแล้วมากรอกเอง',
+         'A web app cannot read from your watch or the phone health app — check the numbers there and enter them here') + '</p>' : '')+
+    '</div>';
+}
 function dailySheet(ds, back){
   dailyDate = ds || todayStr();
   const draw = () => {
@@ -2498,22 +2599,10 @@ function dailySheet(ds, back){
       '</div>'+
       (isToday ? '' : '<button class="btn ghost sm full" data-nav="0" style="margin-bottom:14px">' + Lx('กลับมาที่วันนี้','Back to today') + '</button>')+
       DAILY_GROUPS.map(g => {
+        if(g.when === 'cycle' && !cycleOn()) return '';
         if(g.custom === 'food') return foodSection(dailyDate);
-        const fs = dailyFieldsOf(g.id);
-        if(!fs.length) return '';
-        return '<div class="card" style="box-shadow:none"><h3>' + g.ic + ' ' + esc(L2(g)) + '</h3>'+
-          dailyRows(fs, d)+
-          (g.id === 'vitals' ? '<div id="dlBp"></div>' : '')+
-          (g.id === 'body' ? '<div id="dlBody2"></div>' : '')+
-          (g.id === 'sleep' ? '<div id="dlSleep"></div>'+
-            '<p class="dn" style="margin-top:8px">' +
-            Lx('ระยะการนอนแบบละเอียด เช่น หลับลึกหรือหลับตื้น ต้องใช้อุปกรณ์สวมใส่วัด เว็บทำเองไม่ได้ จึงให้ให้คะแนนความรู้สึกตอนตื่นแทน',
-               'Detailed sleep stages need a wearable to measure. A web app cannot do it, so rate how you felt on waking instead.') + '</p>' : '')+
-          (g.id === 'move' ? '<div id="dlMove"></div>'+
-            '<p class="dn" style="margin-top:8px">' +
-            Lx('เว็บอ่านค่าจากนาฬิกาหรือแอปสุขภาพของเครื่องไม่ได้ ต้องดูตัวเลขจากที่นั่นแล้วมากรอกเอง',
-               'A web app cannot read from your watch or the phone health app — check the numbers there and enter them here') + '</p>' : '')+
-          '</div>';
+        if(g.id === 'mind' && moodConcern()) return groupHtml(g, d) + supportCard();
+        return groupHtml(g, d);
       }).join('')+
       '<p class="dn" style="margin-top:4px">' +
       Lx('บันทึกอัตโนมัติทันทีที่พิมพ์ ไม่ต้องกดบันทึก เว้นว่างไว้ได้ถ้าวันนั้นไม่ได้วัด',
@@ -2591,6 +2680,23 @@ function dailySheet(ds, back){
       if(wk && wk.days > 1) bits.push(Lx('เฉลี่ย 7 วันที่ผ่านมา ','Last 7 days average ') + fmtDuration(wk.avg) +
         Lx(' จาก ' + wk.days + ' คืนที่บันทึกไว้', ' from ' + wk.days + ' nights recorded'));
       sl.innerHTML = bits.length ? '<p class="dn" style="margin-top:10px">' + bits.join('<br>') + '</p>' : '';
+    }
+    const gl = $('#dlGlu'); if(gl) gl.innerHTML = labHint(d);
+    const lp = $('#dlLipid'); if(lp) lp.innerHTML = lipidHint(d);
+    const cy = $('#dlCycle');
+    if(cy) cy.innerHTML = cycleHint();
+    const mn = $('#dlMind');
+    if(mn){
+      const row = key => recentDaily(key, 7).map(x => {
+        const o = (DAILY_OPTS[key === 'mood' ? 'MOOD_Q' : 'STRESS_Q'] || []).find(z => z.v === x.v);
+        return '<i title="' + esc(fmtDate(x.ds)) + '">' + (o ? o.ic : '·') + '</i>';
+      }).join('');
+      const hasAny = recentDaily('mood', 7).some(x => x.v != null) || recentDaily('stress', 7).some(x => x.v != null);
+      mn.innerHTML = hasAny
+        ? '<p class="dn" style="margin-top:10px">' + Lx('7 วันที่ผ่านมา','Last 7 days') + '</p>'+
+          '<div class="streak">' + Lx('<span>อารมณ์</span>','<span>Mood</span>') + row('mood') + '</div>'+
+          '<div class="streak">' + Lx('<span>ความเครียด</span>','<span>Stress</span>') + row('stress') + '</div>'
+        : '';
     }
     const mv = $('#dlMove');
     if(mv){
@@ -2825,6 +2931,391 @@ const SLEEP_Q = [
   {v:5, ic:'😀', th:'ดีมาก',    en:'Very good'}
 ];
 DAILY_OPTS.SLEEP_Q = SLEEP_Q;
+
+
+/* ================================================================
+   อารมณ์และความเครียด
+   หน้าที่ของส่วนนี้คือช่วยให้ผู้ใช้เห็นรูปแบบของตัวเอง
+   ไม่ใช่แบบคัดกรองและไม่ใช่การวินิจฉัย
+   ================================================================ */
+const MOOD_Q = [
+  {v:1, ic:'😞', th:'แย่',        en:'Low'},
+  {v:2, ic:'😕', th:'ไม่ค่อยดี',  en:'Down'},
+  {v:3, ic:'😐', th:'เฉย ๆ',      en:'Neutral'},
+  {v:4, ic:'🙂', th:'ดี',         en:'Good'},
+  {v:5, ic:'😄', th:'ดีมาก',      en:'Great'}
+];
+const STRESS_Q = [
+  {v:1, ic:'😌', th:'ไม่เครียด',   en:'Not at all'},
+  {v:2, ic:'🙂', th:'น้อย',        en:'A little'},
+  {v:3, ic:'😐', th:'ปานกลาง',     en:'Moderate'},
+  {v:4, ic:'😣', th:'ค่อนข้างมาก', en:'Quite high'},
+  {v:5, ic:'😫', th:'มากที่สุด',   en:'Very high'}
+];
+DAILY_OPTS.MOOD_Q = MOOD_Q;
+DAILY_OPTS.STRESS_Q = STRESS_Q;
+
+/* ย้อนดูค่าที่บันทึกไว้ n วันหลังสุด */
+function recentDaily(key, days){
+  const out = [];
+  for(let i = days - 1; i >= 0; i--){
+    const t = new Date(); t.setDate(t.getDate() - i);
+    const ds = todayStr(t), d = dayLog(ds);
+    out.push({ds:ds, v:(d && d[key] != null) ? d[key] : null});
+  }
+  return out;
+}
+/* ควรชวนให้คุยกับใครสักคนหรือยัง
+   ใช้เกณฑ์ง่าย ๆ และตั้งใจให้ไม่ไวเกินไป จะได้ไม่รบกวนคนที่แค่มีวันแย่ ๆ วันเดียว */
+function moodConcern(){
+  const days = recentDaily('mood', 14).filter(x => x.v != null);
+  if(days.length < 3) return false;
+  const low = days.filter(x => x.v <= 2).length;
+  let streak = 0, best = 0;
+  days.forEach(x => { streak = x.v <= 2 ? streak + 1 : 0; if(streak > best) best = streak; });
+  return best >= 3 || low >= 4;
+}
+function supportCard(){
+  return '<div class="card" style="box-shadow:none;background:color-mix(in srgb,#4A9BF5 8%,var(--card));'+
+    'border-color:color-mix(in srgb,#4A9BF5 30%,var(--line))">'+
+    '<h3 style="color:#2E6FC4">🤝 ' + Lx('อยากชวนคุยสักนิด','A gentle note') + '</h3>'+
+    '<p style="font-size:13.5px;color:var(--ink-2);margin:0;line-height:1.7">' +
+    Lx('ช่วงนี้คุณบันทึกว่าอารมณ์ไม่ค่อยดีมาหลายวัน นี่ไม่ใช่การวินิจฉัยโรคและไม่ใช่แบบคัดกรอง ' +
+       'เป็นเพียงสิ่งที่คุณบันทึกไว้เอง<br><br>' +
+       'ถ้ารู้สึกแบบนี้ต่อเนื่อง ลองเล่าให้คนที่ไว้ใจฟังสักคน จะเป็นคนในบ้าน เพื่อน หรือหมอที่ดูแลอยู่ก็ได้ ' +
+       'และถ้ารู้สึกว่ารับมือคนเดียวไม่ไหว <b>สายด่วนสุขภาพจิต 1323</b> รับสายตลอด 24 ชั่วโมง ไม่มีค่าใช้จ่าย ' +
+       'การขอความช่วยเหลือเร็วช่วยได้จริง',
+       'You have logged a low mood for several days. This is not a diagnosis and not a screening test — ' +
+       'it is simply what you recorded yourself.<br><br>' +
+       'If this keeps up, try telling someone you trust: family, a friend, or the doctor who looks after you. ' +
+       'And if it feels like too much to carry alone, the Thai mental health line <b>1323</b> answers around the clock, free of charge. ' +
+       'Reaching out early genuinely helps.') + '</p></div>';
+}
+
+
+/* ================================================================
+   ติดตามรอบเดือน
+   เป็นการบันทึกและประมาณการจากสิ่งที่ผู้ใช้บันทึกเองเท่านั้น
+   ไม่ใช้เป็นวิธีคุมกำเนิดและไม่ใช้ตัดสินใจเรื่องการตั้งครรภ์
+   ================================================================ */
+const FLOW_Q = [
+  {v:1, ic:'💧', th:'กระปริดกระปรอย', en:'Spotting'},
+  {v:2, ic:'🩸', th:'น้อย',           en:'Light'},
+  {v:3, ic:'🩸', th:'ปานกลาง',        en:'Medium'},
+  {v:4, ic:'🩸', th:'มาก',            en:'Heavy'}
+];
+const CRAMP_Q = [
+  {v:1, ic:'🙂', th:'ไม่ปวด',   en:'None'},
+  {v:2, ic:'😐', th:'ปวดน้อย',  en:'Mild'},
+  {v:3, ic:'😣', th:'ปวดปานกลาง', en:'Moderate'},
+  {v:4, ic:'😫', th:'ปวดมาก',   en:'Severe'}
+];
+DAILY_OPTS.FLOW_Q = FLOW_Q;
+DAILY_OPTS.CRAMP_Q = CRAMP_Q;
+
+function cycleOn(){
+  return !!(P && P.body && P.body.sex === 'f' && P.settings && P.settings.cycle);
+}
+function dayDiff(a, b){ return Math.round((parseDate(b) - parseDate(a)) / 86400000); }
+function addDays(ds, n){ const t = parseDate(ds); t.setDate(t.getDate() + n); return todayStr(t); }
+/* จับกลุ่มวันที่มีประจำเดือนที่ต่อเนื่องกันเป็นรอบ ๆ */
+function periodRuns(){
+  const keys = Object.keys(P.daily || {}).filter(k => P.daily[k].flow).sort();
+  const runs = [];
+  keys.forEach(k => {
+    const last = runs[runs.length - 1];
+    if(last && dayDiff(last.end, k) === 1){ last.end = k; last.days++; }
+    else runs.push({start:k, end:k, days:1});
+  });
+  return runs;
+}
+function cycleInfo(){
+  const runs = periodRuns();
+  if(!runs.length) return null;
+  const last = runs[runs.length - 1];
+  const starts = runs.map(r => r.start);
+  const lens = [];
+  for(let i = 1; i < starts.length; i++) lens.push(dayDiff(starts[i-1], starts[i]));
+  /* ตัดรอบที่สั้นหรือยาวผิดปกติออก มักเกิดจากการบันทึกไม่ครบ */
+  const recent = lens.slice(-6).filter(x => x >= 15 && x <= 60);
+  const avg = recent.length ? Math.round(recent.reduce((a,b) => a + b, 0) / recent.length) : null;
+  const cycleLen = avg || 28;
+  const lastRuns = runs.slice(-6);
+  return {
+    runs: runs,
+    last: last,
+    avg: avg,
+    cycles: recent.length,
+    cycleLen: cycleLen,
+    dayOfCycle: dayDiff(last.start, todayStr()) + 1,
+    nextStart: addDays(last.start, cycleLen),
+    daysTo: dayDiff(todayStr(), addDays(last.start, cycleLen)),
+    avgDuration: Math.round(lastRuns.reduce((a,r) => a + r.days, 0) / lastRuns.length)
+  };
+}
+function cycleHint(){
+  const c = cycleInfo();
+  if(!c) return '<p class="dn" style="margin-top:10px">' +
+    Lx('เริ่มบันทึกวันที่มีประจำเดือน แล้วระบบจะคำนวณความยาวรอบและประมาณรอบถัดไปให้',
+       'Start logging the days you bleed and the app will work out your cycle length and estimate the next one') + '</p>';
+  const bits = [];
+  if(c.dayOfCycle > 0 && c.dayOfCycle <= 60)
+    bits.push('<b>' + Lx('วันนี้เป็นวันที่ ' + c.dayOfCycle + ' ของรอบ', 'Day ' + c.dayOfCycle + ' of this cycle') + '</b>');
+  bits.push(Lx('รอบล่าสุดเริ่ม ','Last period started ') + fmtDate(c.last.start) +
+            Lx(' นาน ' + c.last.days + ' วัน', ', lasting ' + c.last.days + ' days'));
+  bits.push(c.avg
+    ? Lx('รอบเฉลี่ย ' + c.avg + ' วัน จาก ' + c.cycles + ' รอบที่บันทึกไว้',
+         'Average cycle ' + c.avg + ' days from ' + c.cycles + ' recorded cycles')
+    : Lx('ยังคำนวณรอบเฉลี่ยไม่ได้ ต้องบันทึกอย่างน้อย 2 รอบ ตอนนี้ใช้ค่ากลาง 28 วันไปก่อน',
+         'Not enough data for an average yet — at least 2 cycles are needed, so 28 days is assumed for now'));
+  bits.push(Lx('คาดว่ารอบถัดไปเริ่มราว ','Next period estimated around ') + fmtDate(c.nextStart) +
+    (c.daysTo > 0 ? Lx(' อีก ' + c.daysTo + ' วัน', ', in ' + c.daysTo + ' days')
+                  : c.daysTo === 0 ? Lx(' คือวันนี้',', today')
+                  : Lx(' ซึ่งเลยมาแล้ว ' + (-c.daysTo) + ' วัน', ', ' + (-c.daysTo) + ' days ago')));
+  return '<p class="dn" style="margin-top:10px">' + bits.join('<br>') + '</p>';
+}
+
+
+/* ================================================================
+   ผลตรวจเลือด
+   เก็บเป็น mg/dL เสมอ แปลงเฉพาะตอนแสดง เหมือนหลักเดียวกับน้ำหนักและส่วนสูง
+   ================================================================ */
+const GLU_F = 18.0182;   /* mg/dL ต่อ mmol/L ของน้ำตาล */
+const CHOL_F = 38.67;    /* ของคอเลสเตอรอล */
+const TRIG_F = 88.57;    /* ของไตรกลีเซอไรด์ */
+function labUnits(){ return (P && P.settings && P.settings.labUnits) || 'mgdl'; }
+function isMmol(){ return labUnits() === 'mmol'; }
+function labFactor(kind){ return kind === 'glu' ? GLU_F : kind === 'trig' ? TRIG_F : CHOL_F; }
+function labToDisp(kind, v){
+  if(v == null) return null;
+  return isMmol() ? Math.round(v / labFactor(kind) * 100) / 100 : Math.round(v * 10) / 10;
+}
+function labFromDisp(kind, v){
+  if(v == null) return null;
+  return isMmol() ? Math.round(v * labFactor(kind) * 10) / 10 : v;
+}
+function labUnitLabel(){ return isMmol() ? 'mmol/L' : Lx('มก./ดล.','mg/dL'); }
+function showLab(kind, v){ return v == null ? '—' : labToDisp(kind, v) + ' ' + labUnitLabel(); }
+
+/* ---- เกณฑ์แปลผล ---- */
+function gluFClass(v){
+  if(v == null) return null;
+  if(v < 54)  return {k:'high', th:'ต่ำมาก ต้องแก้ทันที',  en:'very low — treat now'};
+  if(v < 70)  return {k:'high', th:'น้ำตาลต่ำ',            en:'low blood sugar'};
+  if(v < 100) return {k:'ok',   th:'อยู่ในเกณฑ์ปกติ',      en:'in the normal range'};
+  if(v < 126) return {k:'mod',  th:'อยู่ในช่วงก่อนเบาหวาน', en:'in the prediabetes range'};
+  return            {k:'high', th:'อยู่ในช่วงของเบาหวาน',  en:'in the diabetes range'};
+}
+function gluPPClass(v){
+  if(v == null) return null;
+  if(v < 70)  return {k:'high', th:'น้ำตาลต่ำ',            en:'low blood sugar'};
+  if(v < 140) return {k:'ok',   th:'อยู่ในเกณฑ์ปกติ',      en:'in the normal range'};
+  if(v < 200) return {k:'mod',  th:'อยู่ในช่วงก่อนเบาหวาน', en:'in the prediabetes range'};
+  return            {k:'high', th:'อยู่ในช่วงของเบาหวาน',  en:'in the diabetes range'};
+}
+function a1cClass(v){
+  if(v == null) return null;
+  if(v < 5.7) return {k:'ok',  th:'อยู่ในเกณฑ์ปกติ',      en:'in the normal range'};
+  if(v < 6.5) return {k:'mod', th:'อยู่ในช่วงก่อนเบาหวาน', en:'in the prediabetes range'};
+  if(v < 7)   return {k:'ok',  th:'คุมได้ตามเป้าหมายทั่วไป', en:'at the usual treatment target'};
+  if(v < 8)   return {k:'mod', th:'สูงกว่าเป้าหมายทั่วไป',  en:'above the usual target'};
+  return           {k:'high', th:'สูงกว่าเป้าหมายมาก',    en:'well above the usual target'};
+}
+/* เป้าหมาย LDL ขึ้นกับความเสี่ยงของแต่ละคน ดูจากโรคประจำตัวที่ระบุไว้ */
+function ldlTarget(){
+  const c = (P.body && P.body.conditions) || [];
+  if(c.includes('cad') || c.includes('stroke')) return {v:70, why:{th:'เพราะระบุว่ามีโรคหัวใจขาดเลือดหรือโรคหลอดเลือดสมอง', en:'because you listed coronary or cerebrovascular disease'}};
+  if(c.includes('dm2') || c.includes('ckd'))    return {v:100, why:{th:'เพราะระบุว่ามีเบาหวานหรือโรคไตเรื้อรัง', en:'because you listed diabetes or chronic kidney disease'}};
+  return {v:130, why:null};
+}
+function ldlClass(v){
+  if(v == null) return null;
+  const t = ldlTarget().v;
+  if(v < t)      return {k:'ok',   th:'ต่ำกว่าเป้าหมายของคุณ', en:'below your target'};
+  if(v < t + 30) return {k:'mod',  th:'สูงกว่าเป้าหมายเล็กน้อย', en:'slightly above your target'};
+  return              {k:'high', th:'สูงกว่าเป้าหมาย',       en:'above your target'};
+}
+function hdlClass(v){
+  if(v == null) return null;
+  const f = P.body && P.body.sex === 'f';
+  const t = f ? 50 : 40;
+  return v >= t ? {k:'ok', th:'อยู่ในเกณฑ์ดี', en:'in the healthy range'}
+                : {k:'mod', th:'ต่ำกว่าเกณฑ์ที่แนะนำ', en:'below the recommended level'};
+}
+function trigClass(v){
+  if(v == null) return null;
+  if(v < 150) return {k:'ok',   th:'อยู่ในเกณฑ์ปกติ',  en:'in the normal range'};
+  if(v < 200) return {k:'mod',  th:'ค่อนไปทางสูง',     en:'borderline high'};
+  if(v < 500) return {k:'high', th:'สูง',              en:'high'};
+  return            {k:'high', th:'สูงมาก เสี่ยงตับอ่อนอักเสบ', en:'very high — risk of pancreatitis'};
+}
+function cholClass(v){
+  if(v == null) return null;
+  if(v < 200) return {k:'ok',  th:'อยู่ในเกณฑ์ดี', en:'desirable'};
+  if(v < 240) return {k:'mod', th:'ค่อนไปทางสูง',  en:'borderline high'};
+  return           {k:'high', th:'สูง',           en:'high'};
+}
+function labHint(d){
+  const rows = [];
+  const add = (kind, v, cls, label) => {
+    if(v == null) return;
+    rows.push(label + ' <b>' + showLab(kind, v) + '</b> · ' + esc(L2(cls)));
+  };
+  add('glu', d.glucoseF, gluFClass(d.glucoseF), Lx('อดอาหาร','Fasting'));
+  add('glu', d.glucosePP, gluPPClass(d.glucosePP), Lx('หลังอาหาร 2 ชม.','2 h after a meal'));
+  if(d.hba1c != null) rows.push('HbA1c <b>' + d.hba1c + '%</b> · ' + esc(L2(a1cClass(d.hba1c))));
+  let extra = '';
+  const lowest = [d.glucoseF, d.glucosePP].filter(x => x != null).sort((a,b) => a - b)[0];
+  if(lowest != null && lowest < 70){
+    extra = '<p class="dn" style="margin-top:8px;color:var(--danger)">' +
+      Lx('น้ำตาลต่ำกว่า 70 ให้กินน้ำตาลที่ดูดซึมเร็วราว 15 กรัม เช่น น้ำหวานครึ่งแก้วหรือลูกอม 3 เม็ด แล้ววัดซ้ำใน 15 นาที ' +
+         'ถ้ายังต่ำให้ทำซ้ำ และถ้าซึมลงหรือปลุกไม่ตื่นต้องไปโรงพยาบาลทันที',
+         'A reading under 70 means low blood sugar. Take about 15 g of fast-acting sugar, such as half a glass of juice or three sweets, then recheck in 15 minutes. ' +
+         'Repeat if still low, and seek emergency care at once if the person becomes drowsy or cannot be woken.') + '</p>';
+  }
+  return (rows.length ? '<p class="dn" style="margin-top:10px">' + rows.join('<br>') + '</p>' : '') + extra;
+}
+function lipidHint(d){
+  const rows = [];
+  const t = ldlTarget();
+  if(d.ldl != null) rows.push('LDL <b>' + showLab('chol', d.ldl) + '</b> · ' + esc(L2(ldlClass(d.ldl))));
+  if(d.hdl != null) rows.push('HDL <b>' + showLab('chol', d.hdl) + '</b> · ' + esc(L2(hdlClass(d.hdl))));
+  if(d.trig != null) rows.push(Lx('ไตรกลีเซอไรด์ ','Triglycerides ') + '<b>' + showLab('trig', d.trig) + '</b> · ' + esc(L2(trigClass(d.trig))));
+  if(d.chol != null) rows.push(Lx('คอเลสเตอรอลรวม ','Total cholesterol ') + '<b>' + showLab('chol', d.chol) + '</b> · ' + esc(L2(cholClass(d.chol))));
+  if(!rows.length) return '';
+  rows.push(Lx('เป้าหมาย LDL ที่ใช้เทียบคือต่ำกว่า ','LDL target used here is under ') + showLab('chol', t.v) +
+    (t.why ? ' ' + esc(L2(t.why)) : ''));
+  return '<p class="dn" style="margin-top:10px">' + rows.join('<br>') + '</p>';
+}
+
+
+/* ================================================================
+   แนวโน้มย้อนหลัง
+   แสดงเฉพาะสิ่งที่ผู้ใช้บันทึกไว้ ไม่สรุปว่าอะไรเป็นสาเหตุของอะไร
+   ================================================================ */
+const TRENDS = [
+  {id:'weight', conv:'mass', th:'น้ำหนัก',        en:'Weight'},
+  {id:'waist',  conv:'len',  th:'เส้นรอบเอว',     en:'Waist'},
+  {id:'bp',     dual:['sys','dia'], th:'ความดันโลหิต', en:'Blood pressure', uth:'มม.ปรอท', uen:'mmHg'},
+  {id:'hr',     th:'ชีพจรขณะพัก',  en:'Resting pulse', uth:'ครั้ง/นาที', uen:'bpm'},
+  {id:'sleep',  calc:'sleep', th:'ชั่วโมงการนอน', en:'Hours of sleep', uth:'ชั่วโมง', uen:'h'},
+  {id:'steps',  th:'จำนวนก้าว',    en:'Steps',       uth:'ก้าว', uen:'steps'},
+  {id:'activeMin', th:'นาทีที่ขยับ', en:'Active minutes', uth:'นาที', uen:'min'},
+  {id:'kcal',   calc:'kcal', th:'พลังงานที่กิน', en:'Energy eaten', uth:'กิโลแคลอรี', uen:'kcal'},
+  {id:'glucoseF', conv:'glu', th:'น้ำตาลอดอาหาร', en:'Fasting glucose'},
+  {id:'hba1c',  th:'HbA1c', en:'HbA1c', uth:'%', uen:'%'},
+  {id:'ldl',    conv:'chol', th:'LDL', en:'LDL'},
+  {id:'trig',   conv:'trig', th:'ไตรกลีเซอไรด์', en:'Triglycerides'},
+  {id:'mood',   scale:true, th:'อารมณ์',        en:'Mood',   uth:'ระดับ 1 ถึง 5', uen:'level 1 to 5'},
+  {id:'stress', scale:true, th:'ความเครียด',   en:'Stress', uth:'ระดับ 1 ถึง 5', uen:'level 1 to 5'}
+];
+function trendUnit(t){
+  if(t.conv) return convUnitLabel(t.conv);
+  return LANG === 'en' ? (t.uen || '') : (t.uth || '');
+}
+function trendValue(t, d){
+  if(!d) return null;
+  if(t.calc === 'sleep'){ const m = sleepMinutes(d.bed, d.wake); return m == null ? null : Math.round(m / 6) / 10; }
+  if(t.calc === 'kcal'){ const ms = d.meals || []; if(!ms.length) return null;
+    return Math.round(ms.reduce((n,m) => n + (m.kcal || 0) * (m.q || 1), 0)); }
+  if(t.dual) return (d[t.dual[0]] != null && d[t.dual[1]] != null) ? [d[t.dual[0]], d[t.dual[1]]] : null;
+  return d[t.id] != null ? d[t.id] : null;
+}
+/* ดึงชุดข้อมูลย้อนหลัง n วัน เรียงจากเก่าไปใหม่ */
+function trendSeries(t, days){
+  const out = [];
+  for(let i = days - 1; i >= 0; i--){
+    const dt = new Date(); dt.setDate(dt.getDate() - i);
+    const ds = todayStr(dt);
+    const v = trendValue(t, dayLog(ds));
+    if(v !== null) out.push({ds:ds, v:v});
+  }
+  return out;
+}
+function trendHas(t){ return trendSeries(t, 400).length > 0; }
+function trendDisp(t, v){
+  if(t.conv) return convToDisp(t.conv, v);
+  return v;
+}
+/* วาดกราฟเส้นเป็น SVG เอง ไม่พึ่งไลบรารีภายนอก */
+function sparkline(series, t){
+  const W = 320, H = 130, PL = 38, PR = 8, PT = 10, PB = 22;
+  const dual = !!t.dual;
+  const vals = [];
+  series.forEach(p => dual ? vals.push(trendDisp(t, p.v[0]), trendDisp(t, p.v[1])) : vals.push(trendDisp(t, p.v)));
+  let lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+  if(lo === hi){ lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.15; lo -= pad; hi += pad;
+  const x = i => PL + (series.length === 1 ? (W - PL - PR) / 2 : i * (W - PL - PR) / (series.length - 1));
+  const y = v => PT + (H - PT - PB) * (1 - (v - lo) / (hi - lo));
+  const line = (get, color) => {
+    const pts = series.map((p,i) => x(i) + ',' + y(trendDisp(t, get(p.v))).toFixed(1)).join(' ');
+    return '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'+
+      series.map((p,i) => '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(trendDisp(t, get(p.v))).toFixed(1) + '" r="2.6" fill="' + color + '"/>').join('');
+  };
+  const fmtY = v => (Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString(LANG === 'en' ? 'en-US' : 'th-TH');
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="spark" preserveAspectRatio="none">'+
+    '<line x1="' + PL + '" y1="' + (H - PB) + '" x2="' + (W - PR) + '" y2="' + (H - PB) + '" stroke="var(--line)" stroke-width="1"/>'+
+    '<line x1="' + PL + '" y1="' + PT + '" x2="' + (W - PR) + '" y2="' + PT + '" stroke="var(--line-2)" stroke-width="1" stroke-dasharray="3 4"/>'+
+    '<text x="2" y="' + (PT + 4) + '" class="ax">' + fmtY(hi) + '</text>'+
+    '<text x="2" y="' + (H - PB + 4) + '" class="ax">' + fmtY(lo) + '</text>'+
+    (dual ? line(v => v[0], '#D14545') + line(v => v[1], '#4A9BF5') : line(v => v, 'var(--accent)'))+
+    '<text x="' + PL + '" y="' + (H - 6) + '" class="ax">' + esc(fmtDate(series[0].ds)) + '</text>'+
+    (series.length > 1 ? '<text x="' + (W - PR) + '" y="' + (H - 6) + '" class="ax" text-anchor="end">' + esc(fmtDate(series[series.length-1].ds)) + '</text>' : '')+
+    '</svg>';
+}
+let trendMetric = 'weight', trendRange = 90;
+function renderTrends(){
+  const host = $('#trendBody'); if(!host) return;
+  const avail = TRENDS.filter(trendHas);
+  if(!avail.length){
+    host.innerHTML = '<p class="h">' + Lx('ยังไม่มีข้อมูลให้ดูแนวโน้ม เริ่มบันทึกประจำวันสัก 2 วันแล้วกราฟจะขึ้นมาเอง',
+                                          'Nothing to chart yet. Record a couple of days and the graph will appear.') + '</p>';
+    return;
+  }
+  if(!avail.some(t => t.id === trendMetric)) trendMetric = avail[0].id;
+  const t = avail.find(x => x.id === trendMetric);
+  const series = trendSeries(t, trendRange);
+  const dual = !!t.dual;
+  const num = p => dual ? p.v[0] : p.v;
+  let body;
+  if(series.length < 2){
+    body = '<p class="dn" style="margin-top:10px">' +
+      Lx('มีข้อมูลแค่ ' + series.length + ' วันในช่วงนี้ ต้องมีอย่างน้อย 2 วันจึงจะเห็นแนวโน้ม',
+         'Only ' + series.length + ' day recorded in this range — at least 2 are needed to show a trend') + '</p>';
+  } else {
+    const first = series[0], last = series[series.length - 1];
+    const diff = num(last) - num(first);
+    const u = trendUnit(t);
+    const fmtV = v => (t.scale ? v : (trendDisp(t, v)).toLocaleString(LANG === 'en' ? 'en-US' : 'th-TH'));
+    const ddRaw = Math.abs(t.conv ? convToDisp(t.conv, Math.abs(diff)) : Math.round(Math.abs(diff) * 10) / 10);
+    const dd = ddRaw.toLocaleString(LANG === 'en' ? 'en-US' : 'th-TH');
+    body = sparkline(series, t)+
+      '<div class="drow"><span class="dl">' + Lx('ค่าล่าสุด','Latest') + '</span><span class="dv">' +
+        (dual ? fmtV(last.v[0]) + '/' + fmtV(last.v[1]) : fmtV(last.v)) + ' ' + esc(u) + '</span></div>'+
+      '<div class="drow"><span class="dl">' + Lx('เทียบกับจุดเริ่มของช่วง','Against the start of the range') + '</span>'+
+        '<span class="dv">' + (diff === 0 ? Lx('เท่าเดิม','no change')
+          : (diff > 0 ? Lx('เพิ่มขึ้น ','up ') : Lx('ลดลง ','down ')) + dd + ' ' + esc(u)) + '</span></div>'+
+      '<p class="dn">' + Lx('จาก ' + series.length + ' วันที่บันทึกไว้ในช่วง ' + trendRange + ' วันหลังสุด',
+                            'From ' + series.length + ' days recorded in the last ' + trendRange + ' days') +
+        (dual ? ' · <span style="color:#D14545">' + Lx('เส้นแดงคือตัวบน','red is systolic') + '</span> · <span style="color:#4A9BF5">' +
+          Lx('เส้นฟ้าคือตัวล่าง','blue is diastolic') + '</span>' : '') + '</p>';
+  }
+  host.innerHTML =
+    '<div class="tagpick" id="trendPick" style="margin-bottom:10px">' +
+      avail.map(x => '<button data-t="' + x.id + '"' + (x.id === trendMetric ? ' class="on"' : '') + '>' + esc(L2(x)) + '</button>').join('') + '</div>'+
+    '<div class="seg" id="trendSeg" style="margin-bottom:12px">'+
+      [30, 90, 365].map(r => '<button data-r="' + r + '"' + (r === trendRange ? ' class="on"' : '') + '>' +
+        (r === 365 ? Lx('1 ปี','1 year') : Lx(r + ' วัน', r + ' days')) + '</button>').join('') + '</div>'+
+    body+
+    '<p class="dn" style="margin-top:12px">' +
+    Lx('กราฟนี้แสดงเฉพาะสิ่งที่คุณบันทึกไว้เท่านั้น การที่ตัวเลขสองอย่างเปลี่ยนไปทางเดียวกัน ' +
+       'ไม่ได้แปลว่าอย่างหนึ่งเป็นสาเหตุของอีกอย่าง ถ้าเห็นการเปลี่ยนแปลงที่ผิดปกติ ให้นำข้อมูลนี้ไปคุยกับแพทย์',
+       'This chart shows only what you recorded. Two numbers moving together does not mean one caused the other. ' +
+       'If you see a change that worries you, take this to your doctor.') + '</p>';
+  $$('#trendPick [data-t]').forEach(b => b.onclick = () => { trendMetric = b.dataset.t; renderTrends(); });
+  $$('#trendSeg [data-r]').forEach(b => b.onclick = () => { trendRange = +b.dataset.r; renderTrends(); });
+}
 
 /* ---- แผ่นระบุยาที่แพ้ ---- */
 function allergySheet(back){
@@ -4337,6 +4828,10 @@ function renderSettings(){
                                        : Lx('เปลี่ยนเป็นกิโลกรัมและเซนติเมตรแล้ว','Switched to kilograms and centimetres'));
     };
   });
+  $$('#labSeg button').forEach(b => {
+    b.classList.toggle('on', b.dataset.v === labUnits());
+    b.onclick = () => { P.settings.labUnits = b.dataset.v; save(); renderSettings(); };
+  });
   $$('#dateSeg button, #dateSeg2 button').forEach(b => {
     b.classList.toggle('on', b.dataset.v === dateStyle());
     b.onclick = () => { P.settings.dateFmt = b.dataset.v; save(); renderSettings(); renderToday(); renderCal(); };
@@ -4404,6 +4899,15 @@ function renderSettings(){
   if(dst) dst.textContent = P.settings.daily
     ? Lx('เก็บน้ำหนัก ความดัน ชีพจร อาหาร การนอน และการเคลื่อนไหวรายวัน','Records weight, blood pressure, pulse, food, sleep and movement each day')
     : Lx('ปิดอยู่ การ์ดบนหน้าวันนี้จะไม่ขึ้น','Off — the card on Today is hidden');
+  const cr = $('#cycleRow');
+  if(cr){
+    cr.classList.toggle('hide', !(P.body && P.body.sex === 'f'));
+    $('#cycleOn').classList.toggle('on', !!P.settings.cycle);
+    $('#cycleOn').onclick = () => { P.settings.cycle = P.settings.cycle ? 0 : 1; save(); renderSettings(); };
+    $('#cycleState').textContent = P.settings.cycle
+      ? Lx('บันทึกวันที่มีประจำเดือนและคาดการณ์รอบถัดไป','Logs your period days and estimates the next one')
+      : Lx('ปิดอยู่ หมวดนี้จะไม่ขึ้นในบันทึกประจำวัน','Off — the section is hidden in the daily log');
+  }
   const dsz = $('#dailySize');
   if(dsz){
     const st = dailyStats();
@@ -5397,8 +5901,19 @@ const DICT = {
 'ค้นหาชื่ออาหาร ไทยหรืออังกฤษ':'Search a dish, Thai or English',
 'ไม่พบอาหารชื่อนี้ในฐานข้อมูล':'No dish by that name in the database',
 'ยังไม่ได้บันทึกอาหารของวันนี้':'No food recorded for this day yet',
-'พลังงานรวมวันนี้':'Energy today','การนอนหลับ':'Sleep','เข้านอน':'Went to bed','ตื่นนอน':'Woke up','คุณภาพการนอน':'Sleep quality',
+'พลังงานรวมวันนี้':'Energy today','น้ำตาลในเลือด':'Blood glucose','ไขมันในเลือด':'Blood lipids','น้ำตาลอดอาหาร':'Fasting glucose',
+'หลังอาหาร 2 ชม.':'2 h after a meal','ไตรกลีเซอไรด์':'Triglycerides','คอเลสเตอรอลรวม':'Total cholesterol',
+'หน่วยผลตรวจเลือด':'Blood test units','มก./ดล.':'mg/dL',
+'ไทยและสหรัฐอเมริกาใช้ มก./ดล. ส่วนยุโรปและออสเตรเลียส่วนใหญ่ใช้ mmol/L ค่าที่เก็บไว้ไม่เปลี่ยน แปลงเฉพาะตอนแสดง':'Thailand and the United States use mg/dL, while most of Europe and Australia use mmol/L. Stored values never change — only the display does.',
+'รอบเดือน':'Menstrual cycle','ประจำเดือนวันนี้':'Flow today','อาการปวดท้อง':'Cramps',
+'ติดตามรอบเดือน':'Cycle tracking','บันทึกวันที่มีประจำเดือนและคาดการณ์รอบถัดไป':'Logs your period days and estimates the next one',
+'กระปริดกระปรอย':'Spotting','ปานกลาง':'Medium','ไม่ปวด':'None','ปวดน้อย':'Mild','ปวดปานกลาง':'Moderate','ปวดมาก':'Severe',
+'อารมณ์และความเครียด':'Mood and stress','อารมณ์วันนี้':'Mood today','ระดับความเครียด':'Stress level',
+'7 วันที่ผ่านมา':'Last 7 days','อารมณ์':'Mood','ความเครียด':'Stress','การนอนหลับ':'Sleep','เข้านอน':'Went to bed','ตื่นนอน':'Woke up','คุณภาพการนอน':'Sleep quality',
 'ตื่นกลางดึกกี่ครั้ง':'Times woken','แย่มาก':'Very poor','ไม่ค่อยดี':'Poor','พอใช้':'Fair','ดีมาก':'Very good',
+'แนวโน้มย้อนหลัง':'Trends over time','เลือกสิ่งที่อยากดู แล้วเลือกช่วงเวลา':'Pick what to look at, then a time range',
+'ชั่วโมงการนอน':'Hours of sleep','นาทีที่ขยับ':'Active minutes','พลังงานที่กิน':'Energy eaten',
+'ชีพจรขณะพัก':'Resting pulse','อารมณ์':'Mood','ความเครียด':'Stress','1 ปี':'1 year',
 'บันทึกประจำวัน':'Daily log','การเคลื่อนไหว':'Movement','จำนวนก้าว':'Steps',
 'เวลาที่ขยับร่างกาย':'Active minutes','แคลอรีจากกิจกรรม':'Active calories',
 'เว็บอ่านค่าจากนาฬิกาหรือแอปสุขภาพของเครื่องไม่ได้ ต้องดูตัวเลขจากที่นั่นแล้วมากรอกเอง':'A web app cannot read from your watch or the phone health app — check the numbers there and enter them here',
@@ -5744,7 +6259,7 @@ function firstRun(){
 }
 function migrate(){
   DB.profiles.forEach(p => {
-    p.settings = Object.assign({theme:'pandan',dark:0,custom:null,customOn:0,lead:5,sound:1,nag:10,autoLock:5,lang:'th',dateFmt:'dmy',daily:1,units:'metric'}, p.settings||{});
+    p.settings = Object.assign({theme:'pandan',dark:0,custom:null,customOn:0,lead:5,sound:1,nag:10,autoLock:5,lang:'th',dateFmt:'dmy',daily:1,units:'metric',cycle:1,labUnits:'mgdl'}, p.settings||{});
     if(p.settings.nag === true) p.settings.nag = 10;
     if(p.settings.nag === false) p.settings.nag = 0;
     p.settings.nag = +p.settings.nag || 0;
@@ -5806,7 +6321,7 @@ function boot(){
 loadData().then(boot).catch(dataError);
 
 /* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
-const APP_VERSION = '26';
+const APP_VERSION = '30';
 let swReg = null, updWaiting = null, updReloading = false;
 function showUpdateBar(w){
   updWaiting = w;
