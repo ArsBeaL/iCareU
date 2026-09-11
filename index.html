@@ -427,6 +427,24 @@ html[data-dark="1"] .limrow .big{color:var(--accent)}
 .scalerow button span{font-size:10px;line-height:1.2;text-align:center}
 .scalerow button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 html[data-dark="1"] .scalerow button.on{color:#0E1419}
+.ghd{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.ghd h3{flex:1}
+.gtm{display:flex;align-items:center;gap:6px;flex:none}
+.gtm label{font-size:11px;color:var(--ink-3)}
+.gtm input{width:104px;padding:6px 8px;font-size:13px;text-align:center}
+.rail.blank:before{display:none}
+.tlh{font-size:14px;font-weight:680;margin:0 0 10px;color:var(--ink-2)}
+.tl{position:relative;padding-left:56px}
+.tl:before{content:'';position:absolute;left:52px;top:6px;bottom:6px;width:1px;background:var(--line)}
+.tlrow{display:block;width:100%;text-align:left;position:relative;margin-bottom:9px}
+.tlrow .tlt{position:absolute;left:-56px;top:14px;width:44px;text-align:right;font-size:12px;
+  font-weight:640;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.tlrow .tlt i{font-style:normal;font-weight:400;color:var(--ink-3)}
+.tlrow .tlc{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);padding:11px 12px}
+.tlrow .bd{flex:1;min-width:0}
+.tlrow .nm{display:block;font-size:14px;font-weight:640}
+.tlrow .tt{display:block;font-size:12px;color:var(--ink-3);margin-top:2px}
 .macbar{display:flex;height:8px;border-radius:6px;overflow:hidden;background:var(--line-2);margin:8px 0}
 .macbar i{display:block;height:100%}
 .mealrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-2)}
@@ -504,6 +522,7 @@ html[data-dark="1"] .scalerow button.on{color:#0E1419}
     <div id="tdStock"></div>
     <div id="tdWater"></div>
     <div id="tdDaily"></div>
+    <div id="tdTimeline"></div>
     <div id="tdBackup"></div>
     <div class="rail" id="rail"></div>
   </section>
@@ -2548,7 +2567,11 @@ let dailyDate = null;
 function groupHtml(g, d){
   const fs = dailyFieldsOf(g.id);
   if(!fs.length) return '';
-  return '<div class="card" style="box-shadow:none"><h3>' + g.ic + ' ' + esc(L2(g)) + '</h3>'+
+  const showTime = ['body','vitals','glu','lipid','move','mind','cycle'].includes(g.id);
+  return '<div class="card" style="box-shadow:none">'+
+    '<div class="ghd"><h3>' + g.ic + ' ' + esc(L2(g)) + '</h3>'+
+    (showTime ? '<span class="gtm"><label>' + Lx('เวลา','Time') + '</label>'+
+      '<input type="time" id="dltm_' + g.id + '" value="' + esc((d.tm && d.tm[g.id]) || '') + '"></span>' : '') + '</div>'+
     dailyRows(fs, d)+
     (g.id === 'vitals' ? '<div id="dlBp"></div>' : '')+
     (g.id === 'body' ? '<div id="dlBody2"></div>' : '')+
@@ -2608,6 +2631,10 @@ function dailySheet(ds, back){
       Lx('บันทึกอัตโนมัติทันทีที่พิมพ์ ไม่ต้องกดบันทึก เว้นว่างไว้ได้ถ้าวันนั้นไม่ได้วัด',
          'Saved automatically as you type. Leave anything blank if you did not measure it that day.') + '</p>';
 
+    DAILY_GROUPS.forEach(g => {
+      const el = $('#dltm_' + g.id); if(!el) return;
+      el.onchange = () => { setGroupTime(dailyDate, g.id, el.value || null); if(VIEW === 'today') renderToday(); };
+    });
     DAILY_FIELDS.forEach(f => {
       const el = $('#dl_' + f.id); if(!el) return;
       if(f.type === 'scale'){
@@ -2789,7 +2816,7 @@ function addMeal(ds, food, qty){
   P.daily = P.daily || {};
   const d = P.daily[ds] || (P.daily[ds] = {});
   d.meals = d.meals || [];
-  d.meals.push({ n:food[0], ne:food[1], s:food[3], se:food[4],
+  d.meals.push({ t:nowHM(), n:food[0], ne:food[1], s:food[3], se:food[4],
                  kcal:food[5], c:food[6], p:food[7], f:food[8], ml:food[9] || 0, q:qty || 1 });
   save();
 }
@@ -2819,10 +2846,13 @@ function foodPicker(ds, back){
         ' · ' + Lx('ค ','C ') + f[6] + Lx(' ป ',' P ') + f[7] + Lx(' ข ',' F ') + f[8] + Lx(' กรัม',' g') +
         (f[9] ? ' · ' + f[9] + Lx(' มล.',' mL') : '') + '</span></span>'+
         '<button class="btn sm" data-add="' + FOODS.indexOf(f) + '" style="flex:none">' + Lx('เพิ่ม','Add') + '</button></div>').join('')
-        : '<div class="empty"><p>' + Lx('ไม่พบอาหารชื่อนี้ในฐานข้อมูล','No dish by that name in the database') + '</p></div>');
+        : '<div class="empty"><p>' + Lx('ไม่พบอาหารชื่อนี้ในรายการ','No dish by that name in the list') + '</p></div>')+
+      '<button class="btn ghost sm full" id="fpNew" style="margin-top:12px">' +
+      Lx('ไม่มีเมนูที่ต้องการ เพิ่มเอง','Not on the list? Add your own') + '</button>';
     const qi = $('#fpQ');
     qi.oninput = () => { const pos = qi.selectionStart; q = qi.value; draw(); const n = $('#fpQ'); n.focus(); n.setSelectionRange(pos, pos); };
     $$('#fpCats [data-c]').forEach(b => b.onclick = () => { cat = b.dataset.c; draw(); });
+    $('#fpNew').onclick = () => customFoodSheet(ds, $('#fpQ').value.trim(), () => foodPicker(ds, back));
     $$('#fpBody [data-add]').forEach(b => b.onclick = () => {
       const f = FOODS[+b.dataset.add];
       addMeal(ds, f, 1);
@@ -3376,6 +3406,274 @@ function quickSheet(){
   });
 }
 
+
+/* ================================================================
+   เพิ่มอาหารที่ไม่มีในรายการ
+   ลองค้นจากฐานข้อมูลเปิด Open Food Facts ก่อน ถ้าไม่ได้ให้กรอกเอง
+   ================================================================ */
+function loadCustomFoods(){
+  (DB.customFoods || []).forEach(f => {
+    if(!FOODS.some(x => x[0] === f[0] && x[3] === f[3])) FOODS.push(f.concat([true]));
+  });
+}
+function saveCustomFood(row){
+  DB.customFoods = DB.customFoods || [];
+  if(!DB.customFoods.some(x => x[0] === row[0] && x[3] === row[3])){
+    DB.customFoods.push(row);
+    FOODS.push(row.concat([true]));
+    save();
+  }
+}
+async function offSearch(q){
+  const url = 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(q) +
+    '&search_simple=1&action=process&json=1&page_size=8' +
+    '&fields=product_name,product_name_th,brands,nutriments,serving_size';
+  const r = await fetch(url, {headers:{'Accept':'application/json'}});
+  if(!r.ok) throw new Error('http ' + r.status);
+  const j = await r.json();
+  return (j.products || []).map(p => {
+    const n = p.nutriments || {};
+    const kcal = n['energy-kcal_100g'];
+    if(kcal == null) return null;
+    return {
+      name: (p.product_name_th || p.product_name || '').trim(),
+      brand: (p.brands || '').split(',')[0].trim(),
+      kcal: Math.round(kcal),
+      c: Math.round((n.carbohydrates_100g || 0) * 10) / 10,
+      p: Math.round((n.proteins_100g || 0) * 10) / 10,
+      f: Math.round((n.fat_100g || 0) * 10) / 10,
+      serving: p.serving_size || ''
+    };
+  }).filter(x => x && x.name);
+}
+function customFoodSheet(ds, q, back){
+  let picked = null, grams = 100;
+  const draw = () => {
+    const d = picked;
+    $('#cfBody').innerHTML =
+      '<div class="fld"><label class="fl">' + Lx('ชื่ออาหาร','Dish name') + '</label>'+
+      '<input id="cfName" value="' + esc(q || '') + '" placeholder="' + Lx('เช่น แกงส้มปลากะพง','e.g. sour curry with sea bass') + '"></div>'+
+      '<button class="btn ghost sm full" id="cfNet" style="margin-bottom:14px">' +
+        Lx('ลองค้นข้อมูลโภชนาการจากอินเทอร์เน็ต','Try looking up nutrition online') + '</button>'+
+      '<div id="cfNetOut"></div>'+
+      '<div class="fld"><label class="fl">' + Lx('หนึ่งหน่วยบริโภคคือเท่าไร','What counts as one serving') + '</label>'+
+      '<input id="cfServe" value="' + esc(d ? d.serveLabel : '') + '" placeholder="' + Lx('เช่น 1 จาน หรือ 1 ถ้วย','e.g. 1 plate or 1 bowl') + '"></div>'+
+      '<div class="three">'+
+        '<div><label class="fl">' + Lx('คาร์บ','Carbs') + ' <span style="font-weight:400;color:var(--ink-3)">' + Lx('ก.','g') + '</span></label>'+
+        '<input type="number" id="cfC" min="0" max="500" step="0.1" value="' + (d ? d.c : '') + '" placeholder="0"></div>'+
+        '<div><label class="fl">' + Lx('โปรตีน','Protein') + ' <span style="font-weight:400;color:var(--ink-3)">' + Lx('ก.','g') + '</span></label>'+
+        '<input type="number" id="cfP" min="0" max="300" step="0.1" value="' + (d ? d.p : '') + '" placeholder="0"></div>'+
+        '<div><label class="fl">' + Lx('ไขมัน','Fat') + ' <span style="font-weight:400;color:var(--ink-3)">' + Lx('ก.','g') + '</span></label>'+
+        '<input type="number" id="cfF" min="0" max="300" step="0.1" value="' + (d ? d.f : '') + '" placeholder="0"></div>'+
+      '</div>'+
+      '<div class="two">'+
+        '<div class="fld"><label class="fl">' + Lx('พลังงาน','Energy') + ' <span style="font-weight:400;color:var(--ink-3)">' + Lx('กิโลแคลอรี','kcal') + '</span></label>'+
+        '<input type="number" id="cfK" min="0" max="5000" step="1" value="' + (d ? d.kcal : '') + '" placeholder="0"></div>'+
+        '<div class="fld"><label class="fl">' + Lx('ถ้าเป็นเครื่องดื่ม','If it is a drink') + ' <span style="font-weight:400;color:var(--ink-3)">' + Lx('มล.','mL') + '</span></label>'+
+        '<input type="number" id="cfML" min="0" max="3000" step="10" placeholder="0"></div>'+
+      '</div>'+
+      '<p class="dn" id="cfCalc"></p>';
+    const recalc = () => {
+      const c = +$('#cfC').value || 0, p = +$('#cfP').value || 0, f = +$('#cfF').value || 0;
+      const k = Math.round(4*c + 4*p + 9*f);
+      $('#cfCalc').innerHTML = (c || p || f)
+        ? Lx('จากสารอาหารหลักที่กรอก พลังงานคิดได้ ','From the macros entered, that works out to ') + '<b>' + k +
+          Lx(' กิโลแคลอรี',' kcal') + '</b>' + Lx(' ระบบจะใช้ค่านี้',' — the app will use this value')
+        : Lx('ถ้าไม่ทราบสารอาหารหลัก กรอกเฉพาะพลังงานก็ได้','If you do not know the macros, entering energy alone is fine');
+    };
+    ['#cfC','#cfP','#cfF'].forEach(x => { const e = $(x); if(e) e.oninput = recalc; });
+    recalc();
+    $('#cfNet').onclick = async () => {
+      const term = $('#cfName').value.trim();
+      if(term.length < 2){ toast(Lx('พิมพ์ชื่ออาหารก่อน','Type a name first')); return; }
+      const out = $('#cfNetOut');
+      out.innerHTML = '<p class="dn">' + Lx('กำลังค้นหา…','Searching…') + '</p>';
+      try{
+        const list = await offSearch(term);
+        if(!list.length){
+          out.innerHTML = '<p class="dn">' + Lx('ไม่พบข้อมูลของอาหารนี้ในฐานข้อมูลออนไลน์ กรอกตัวเลขเองด้านล่างได้เลย',
+                                                'Nothing found online for this. Just type the numbers below.') + '</p>';
+          return;
+        }
+        out.innerHTML = '<p class="dn">' + Lx('ค่าต่อ 100 กรัม จากฐานข้อมูลเปิด Open Food Facts ซึ่งอาสาสมัครเป็นผู้กรอก ควรทานกับฉลากจริง',
+                                              'Per 100 g, from the open Open Food Facts database filled in by volunteers — check against the real label') + '</p>'+
+          list.map((x,i) => '<button class="mrow" data-off="' + i + '" style="align-items:center;width:100%;text-align:left">'+
+            '<span class="bd"><span class="nm">' + esc(x.name) + (x.brand ? ' · ' + esc(x.brand) : '') + '</span>'+
+            '<span class="tt">' + x.kcal + Lx(' กิโลแคลอรี',' kcal') + Lx(' ต่อ 100 ก.',' per 100 g') +
+            ' · ' + Lx('ค ','C ') + x.c + Lx(' ป ',' P ') + x.p + Lx(' ข ',' F ') + x.f + '</span></span>'+
+            '<span class="sev low" style="flex:none">' + Lx('ใช้ค่านี้','Use') + '</span></button>').join('');
+        $$('#cfNetOut [data-off]').forEach(b => b.onclick = () => {
+          const x = list[+b.dataset.off];
+          const g = prompt(Lx('หนึ่งหน่วยบริโภคของคุณหนักกี่กรัม','How many grams is one serving for you?'),
+                           x.serving ? String(parseFloat(x.serving) || 100) : '100');
+          if(g === null) return;
+          grams = Math.max(1, +g || 100);
+          const k = grams / 100;
+          picked = { serveLabel: Lx(grams + ' กรัม', grams + ' g'),
+                     c: Math.round(x.c * k * 10) / 10, p: Math.round(x.p * k * 10) / 10,
+                     f: Math.round(x.f * k * 10) / 10, kcal: Math.round(x.kcal * k) };
+          q = $('#cfName').value.trim() || x.name;
+          draw();
+          toast(Lx('เติมค่าให้แล้ว ตรวจดูอีกครั้งก่อนบันทึก','Filled in — please check before saving'));
+        });
+      }catch(e){
+        out.innerHTML = '<p class="dn">' + Lx('ค้นหาไม่สำเร็จ อาจไม่ได้ต่ออินเทอร์เน็ตอยู่ กรอกตัวเลขเองด้านล่างได้เลย',
+                                              'The search did not work — you may be offline. Just type the numbers below.') + '</p>';
+      }
+    };
+  };
+  openSheet('<div class="shd"><b>' + Lx('เพิ่มอาหารเอง','Add your own food') + '</b>'+
+    '<button class="btn sm ghost" onclick="dismissSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    '<div id="cfBody"></div>'+
+    '<button class="btn full" id="cfSave" style="margin-top:14px">' + Lx('บันทึกและเพิ่มลงวันนี้','Save and add to this day') + '</button>'+
+    '<p class="dn" style="margin-top:10px">' +
+    Lx('อาหารที่เพิ่มเองจะอยู่ในรายการให้เลือกครั้งต่อไป และเก็บไว้ในเครื่องนี้เท่านั้น',
+       'Food you add stays in your list for next time, and lives on this device only') + '</p>', back);
+  draw();
+  $('#cfSave').onclick = () => {
+    const name = $('#cfName').value.trim();
+    if(name.length < 2){ toast(Lx('ใส่ชื่ออาหารก่อน','Enter a name first')); return; }
+    const c = +$('#cfC').value || 0, p = +$('#cfP').value || 0, f = +$('#cfF').value || 0;
+    let kcal = Math.round(4*c + 4*p + 9*f);
+    if(!kcal) kcal = Math.round(+$('#cfK').value || 0);
+    if(!kcal){ toast(Lx('กรอกพลังงานหรือสารอาหารหลักอย่างน้อยหนึ่งอย่าง','Enter energy or at least one macro')); return; }
+    const serve = $('#cfServe').value.trim() || Lx('1 หน่วย','1 serving');
+    const ml = Math.round(+$('#cfML').value || 0);
+    const row = [name, name, 'mine', serve, serve, kcal, c, p, f, ml];
+    saveCustomFood(row);
+    addMeal(ds, row, 1);
+    toast(Lx('เพิ่ม ' + name + ' แล้ว','Added ' + name));
+    dismissSheet();
+  };
+}
+
+
+/* ================================================================
+   ไทม์ไลน์ของบันทึกประจำวัน
+   ================================================================ */
+function nowHM(){ const d = new Date(); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+function groupTime(ds, gid){ const d = dayLog(ds); return (d && d.tm && d.tm[gid]) || null; }
+function setGroupTime(ds, gid, v){
+  P.daily = P.daily || {};
+  const d = P.daily[ds] || (P.daily[ds] = {});
+  d.tm = d.tm || {};
+  if(v) d.tm[gid] = v; else delete d.tm[gid];
+  if(!Object.keys(d.tm).length) delete d.tm;
+  if(!Object.keys(d).length) delete P.daily[ds];
+  save();
+}
+/* สรุปสั้น ๆ ของแต่ละหมวดไว้แสดงบนไทม์ไลน์ */
+function groupSummary(gid, d){
+  const bits = [];
+  if(gid === 'body'){
+    if(d.weight != null) bits.push(showMass(d.weight));
+    if(d.waist != null) bits.push(Lx('เอว ','waist ') + showLen(d.waist));
+  } else if(gid === 'vitals'){
+    if(d.sys && d.dia) bits.push(d.sys + '/' + d.dia);
+    if(d.hr) bits.push(d.hr + Lx(' ครั้ง/นาที',' bpm'));
+  } else if(gid === 'glu'){
+    if(d.glucoseF != null) bits.push(Lx('อดอาหาร ','fasting ') + showLab('glu', d.glucoseF));
+    if(d.glucosePP != null) bits.push(Lx('หลังอาหาร ','after a meal ') + showLab('glu', d.glucosePP));
+    if(d.hba1c != null) bits.push('HbA1c ' + d.hba1c + '%');
+  } else if(gid === 'lipid'){
+    if(d.ldl != null) bits.push('LDL ' + showLab('chol', d.ldl));
+    if(d.trig != null) bits.push(Lx('ไตรกลีเซอไรด์ ','trig ') + showLab('trig', d.trig));
+  } else if(gid === 'move'){
+    if(d.steps != null) bits.push(fmtNum(d.steps) + Lx(' ก้าว',' steps'));
+    if(d.activeMin != null) bits.push(d.activeMin + Lx(' นาที',' min'));
+  } else if(gid === 'mind'){
+    const m = MOOD_Q.find(x => x.v === d.mood), st = STRESS_Q.find(x => x.v === d.stress);
+    if(m) bits.push(m.ic + ' ' + L2(m));
+    if(st) bits.push(Lx('เครียด ','stress ') + L2(st));
+  } else if(gid === 'cycle'){
+    const f = FLOW_Q.find(x => x.v === d.flow);
+    if(f) bits.push(L2(f));
+  } else if(gid === 'sleep'){
+    const m = sleepMinutes(d.bed, d.wake);
+    if(m != null) bits.push(fmtDuration(m));
+    if(d.bed && d.wake) bits.push(d.bed + ' – ' + d.wake);
+  }
+  return bits.join(' · ');
+}
+/* รวมทุกอย่างที่บันทึกไว้ในวันนั้นเป็นรายการเดียว เรียงตามเวลา */
+function dayEvents(ds){
+  const d = dayLog(ds);
+  if(!d) return [];
+  const out = [];
+  (d.meals || []).forEach((m, i) => out.push({
+    kind:'meal', i:i, t:m.t || null, ic:'🍽️',
+    title: mealLabel(m) + (m.q > 1 ? ' ×' + m.q : ''),
+    sub: mealServing(m) + ' · ' + fmtNum((m.kcal || 0) * (m.q || 1)) + Lx(' กิโลแคลอรี',' kcal')
+  }));
+  DAILY_GROUPS.forEach(g => {
+    if(g.custom || g.id === 'note') return;
+    if(g.when === 'cycle' && !cycleOn()) return;
+    const sum = groupSummary(g.id, d);
+    if(!sum) return;
+    out.push({ kind:'group', gid:g.id, t:(g.id === 'sleep' ? (d.wake || groupTime(ds, g.id)) : groupTime(ds, g.id)),
+               ic:g.ic, title:L2(g), sub:sum });
+  });
+  if(d.note) out.push({kind:'note', t:null, ic:'📝', title:Lx('บันทึกของวันนี้',"Today's note"), sub:d.note});
+  out.sort((a,b) => {
+    if(a.t && b.t) return toMin(a.t) - toMin(b.t);
+    if(a.t) return -1;
+    if(b.t) return 1;
+    return 0;
+  });
+  return out;
+}
+function renderDailyTimeline(){
+  const host = $('#tdTimeline'); if(!host) return;
+  if(!P.settings.daily){ host.innerHTML = ''; return; }
+  const ds = todayStr(), ev = dayEvents(ds);
+  if(!ev.length){ host.innerHTML = ''; return; }
+  host.innerHTML = '<h3 class="tlh">' + Lx('บันทึกของวันนี้',"What you logged today") + '</h3>'+
+    '<div class="tl">' + ev.map((e,i) =>
+      '<button class="tlrow" data-e="' + i + '">'+
+      '<span class="tlt">' + (e.t ? e.t : '<i>' + Lx('ไม่ระบุ','—') + '</i>') + '</span>'+
+      '<span class="tlc"><span class="pill">' + e.ic + '</span>'+
+      '<span class="bd"><span class="nm">' + esc(e.title) + '</span>'+
+      '<span class="tt">' + esc(e.sub) + '</span></span></span></button>').join('') + '</div>';
+  $$('#tdTimeline [data-e]').forEach(b => b.onclick = () => {
+    const e = ev[+b.dataset.e];
+    if(e.kind === 'meal') mealEditSheet(ds, e.i);
+    else dailySheet(ds);
+  });
+}
+/* แก้ไขรายการอาหารหนึ่งรายการ */
+function mealEditSheet(ds, i){
+  const m = (meals(ds) || [])[i];
+  if(!m) return;
+  openSheet('<div class="shd"><b>' + esc(mealLabel(m)) + '</b>'+
+    '<button class="btn sm ghost" onclick="closeSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    '<p class="h">' + esc(mealServing(m)) + ' · ' + fmtNum(m.kcal || 0) + Lx(' กิโลแคลอรีต่อหน่วย',' kcal per serving') + '</p>'+
+    '<div class="two">'+
+      '<div class="fld"><label class="fl">' + Lx('เวลา','Time') + '</label>'+
+      '<input type="time" id="meT" value="' + esc(m.t || '') + '" style="text-align:center"></div>'+
+      '<div class="fld"><label class="fl">' + Lx('จำนวนหน่วย','Servings') + '</label>'+
+      '<input type="number" id="meQ" min="0.25" max="20" step="0.25" value="' + (m.q || 1) + '"></div>'+
+    '</div>'+
+    '<p class="dn" id="meCalc"></p>'+
+    '<button class="btn full" id="meSave">' + Lx('บันทึกการแก้ไข','Save changes') + '</button>'+
+    '<button class="btn ghost full sm" id="meDel" style="margin-top:9px;color:var(--danger)">' + Lx('ลบรายการนี้','Remove this item') + '</button>');
+  const calc = () => {
+    const q = +$('#meQ').value || 1;
+    $('#meCalc').innerHTML = Lx('รวม ','Total ') + '<b>' + fmtNum(Math.round((m.kcal || 0) * q)) + Lx(' กิโลแคลอรี',' kcal') + '</b>';
+  };
+  $('#meQ').oninput = calc; calc();
+  $('#meSave').onclick = () => {
+    const d = dayLog(ds); if(!d || !d.meals || !d.meals[i]) return;
+    d.meals[i].t = $('#meT').value || null;
+    d.meals[i].q = Math.max(0.25, +$('#meQ').value || 1);
+    save(); closeSheet(); renderToday();
+    toast(Lx('แก้ไขแล้ว','Updated'));
+  };
+  $('#meDel').onclick = () => {
+    removeMeal(ds, i); closeSheet(); renderToday();
+    toast(Lx('ลบแล้ว','Removed'));
+  };
+}
+
 /* ---- แผ่นระบุยาที่แพ้ ---- */
 function allergySheet(back){
   const draw = () => {
@@ -3856,6 +4154,7 @@ function renderToday(){
   renderStock();
   renderWater();
   renderDailyCard();
+  renderDailyTimeline();
   renderBackupNudge();
   $('#tdWarn').innerHTML = uniq.length ? (
     '<button class="mrow" id="warnBar" style="border-color:color-mix(in srgb,var(--danger) 32%,var(--line));'+
@@ -3878,6 +4177,7 @@ function renderToday(){
   /* รางเวลา */
   const rail = $('#rail');
   if(!doses.length){
+    rail.classList.add('blank');
     rail.style.paddingLeft = '0';
     rail.innerHTML = '<div class="empty"><div class="big">🗓️</div>'+
       '<p>' + (P.meds.length ? 'วันนี้ไม่มีรายการที่ถึงกำหนด' : 'ยังไม่มีรายการยาหรืออาหารเสริม') + '</p>'+
@@ -3885,6 +4185,7 @@ function renderToday(){
     $('#emptyAdd').onclick = () => P.meds.length ? go('meds') : medEditor(null);
     return;
   }
+  rail.classList.remove('blank');
   rail.style.paddingLeft = '';
 
   const groups = {};
@@ -5958,7 +6259,12 @@ const DICT = {
 'สัญญาณชีพ':'Vital signs','สัญญาณชีพล่าสุด':'Latest vital signs',
 'ค่าที่วัดได้ล่าสุดจากบันทึกประจำวัน':'The most recent readings from your daily log',
 'ยังไม่มีค่าที่บันทึกไว้':'Nothing recorded yet','บันทึกค่าที่วัดวันนี้':"Record today's readings",
-'อาหารและโภชนาการ':'Food and nutrition','เพิ่มอาหาร':'Add food',
+'อาหารและโภชนาการ':'Food and nutrition','เพิ่มอาหาร':'Add food','ไม่มีเมนูที่ต้องการ เพิ่มเอง':"Not on the list? Add your own",
+'เพิ่มอาหารเอง':'Add your own food','ชื่ออาหาร':'Dish name','หนึ่งหน่วยบริโภคคือเท่าไร':'What counts as one serving',
+'ลองค้นข้อมูลโภชนาการจากอินเทอร์เน็ต':'Try looking up nutrition online','กำลังค้นหา…':'Searching…',
+'คาร์บ':'Carbs','โปรตีน':'Protein','ไขมัน':'Fat','พลังงาน':'Energy','ถ้าเป็นเครื่องดื่ม':'If it is a drink',
+'บันทึกและเพิ่มลงวันนี้':'Save and add to this day','เพิ่มเอง':'Added by me','ใช้ค่านี้':'Use',
+'ไม่พบอาหารชื่อนี้ในรายการ':'No dish by that name in the list',
 'ค้นหาชื่ออาหาร ไทยหรืออังกฤษ':'Search a dish, Thai or English',
 'ไม่พบอาหารชื่อนี้ในฐานข้อมูล':'No dish by that name in the database',
 'ยังไม่ได้บันทึกอาหารของวันนี้':'No food recorded for this day yet',
@@ -5975,6 +6281,8 @@ const DICT = {
 'แนวโน้มย้อนหลัง':'Trends over time','เลือกสิ่งที่อยากดู แล้วเลือกช่วงเวลา':'Pick what to look at, then a time range',
 'ชั่วโมงการนอน':'Hours of sleep','นาทีที่ขยับ':'Active minutes','พลังงานที่กิน':'Energy eaten',
 'ชีพจรขณะพัก':'Resting pulse','อารมณ์':'Mood','ความเครียด':'Stress','1 ปี':'1 year',
+'บันทึกของวันนี้':"What you logged today",'เวลา':'Time','จำนวนหน่วย':'Servings',
+'บันทึกการแก้ไข':'Save changes','ลบรายการนี้':'Remove this item','ไม่ระบุ':'—',
 'บันทึกประจำวัน':'Daily log','การเคลื่อนไหว':'Movement','จำนวนก้าว':'Steps',
 'เวลาที่ขยับร่างกาย':'Active minutes','แคลอรีจากกิจกรรม':'Active calories',
 'เว็บอ่านค่าจากนาฬิกาหรือแอปสุขภาพของเครื่องไม่ได้ ต้องดูตัวเลขจากที่นั่นแล้วมากรอกเอง':'A web app cannot read from your watch or the phone health app — check the numbers there and enter them here',
@@ -6380,15 +6688,17 @@ function dataError(e){
 function boot(){
   load();
   buildDrugIndex();
+  loadCustomFoods();
   if(!DB.profiles.length) return firstRun();
   migrate(); save();
   buildDrugIndex();
+  loadCustomFoods();
   lockNow();
 }
 loadData().then(boot).catch(dataError);
 
 /* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
-const APP_VERSION = '31';
+const APP_VERSION = '32';
 let swReg = null, updWaiting = null, updReloading = false;
 function showUpdateBar(w){
   updWaiting = w;
