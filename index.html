@@ -476,8 +476,8 @@ html[data-dark="1"] .scalerow button.on{color:#0E1419}
       <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
       <span class="badge hide" id="bellBadge"></span>
     </button>
-    <button class="iconbtn" id="btnLock" data-tip="ล็อกหน้าจอทันที">
-      <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    <button class="iconbtn" id="btnQuick" data-tip="บันทึกด่วน เพิ่มรายการ และล็อกหน้าจอ">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     </button>
   </div>
 
@@ -3317,6 +3317,65 @@ function renderTrends(){
   $$('#trendSeg [data-r]').forEach(b => b.onclick = () => { trendRange = +b.dataset.r; renderTrends(); });
 }
 
+
+/* ================================================================
+   ปุ่มบวก — รวมสิ่งที่ต้องบันทึกบ่อยไว้ที่เดียว
+   ================================================================ */
+function nextPendingDose(type){
+  const ds = todayStr(), now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const list = dosesFor(ds).filter(d => !d.status && (!type || d.med.type === type));
+  if(!list.length) return null;
+  /* เลือกมื้อที่เลยเวลามาแล้วก่อน ถ้าไม่มีก็มื้อถัดไป */
+  const late = list.filter(d => toMin(d.time) <= nowMin);
+  return late.length ? late[late.length - 1] : list[0];
+}
+function quickSheet(){
+  const ds = todayStr();
+  const dose = nextPendingDose(null);
+  const water = nextPendingDose('water');
+  const hasWaterItem = (P.meds || []).some(m => m.active && m.type === 'water');
+  const row = (id, ic, title, sub) =>
+    '<button class="mrow" data-q="' + id + '" style="align-items:center;width:100%;text-align:left">'+
+    '<span class="pill">' + ic + '</span>'+
+    '<span class="bd"><span class="nm">' + title + '</span>'+
+    (sub ? '<span class="tt">' + sub + '</span>' : '') + '</span>'+
+    '<svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;stroke:var(--ink-3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M9 18l6-6-6-6"/></svg></button>';
+
+  openSheet('<div class="shd"><b>' + Lx('บันทึกด่วน','Quick log') + '</b>'+
+    '<button class="btn sm ghost" onclick="closeSheet()">' + Lx('ปิด','Close') + '</button></div>'+
+    (dose ? row('take', dose.med.icon || '💊',
+      Lx('บันทึกว่ากินแล้ว','Mark a dose taken'),
+      esc(dose.med.name) + ' · ' + dose.time) : '')+
+    (hasWaterItem && water ? row('water', '💧',
+      Lx('ดื่มน้ำแล้วหนึ่งครั้ง','Log one drink of water'),
+      esc(water.med.name) + ' · ' + water.time) : '')+
+    (P.settings.daily ? row('food', '🍽️', Lx('บันทึกอาหาร','Log food'),
+      Lx('เลือกจากรายการอาหาร 136 รายการ','Pick from 136 dishes')) : '')+
+    (P.settings.daily ? row('daily', '📈', Lx('บันทึกประจำวัน','Daily log'),
+      Lx('น้ำหนัก ความดัน การนอน และอื่น ๆ','Weight, blood pressure, sleep and more')) : '')+
+    row('med', '➕', Lx('เพิ่มรายการยาหรืออาหารเสริม','Add a medicine or supplement'),
+      Lx('ตั้งเวลาและความถี่ใหม่','Set up times and frequency'))+
+    '<div class="two" style="margin-top:14px">'+
+      '<button class="btn ghost sm" data-q="lock">' + Lx('ล็อกหน้าจอ','Lock the screen') + '</button>'+
+      '<button class="btn ghost sm" data-q="check">' + Lx('ตรวจคู่ยา','Check a pair') + '</button>'+
+    '</div>');
+
+  const act = {
+    take: () => { if(dose){ setLog(dose.key, 'taken'); toast(Lx('บันทึกว่ากิน ' + dose.med.name + ' แล้ว','Marked ' + dose.med.name + ' as taken')); } },
+    water: () => { if(water){ setLog(water.key, 'taken'); toast(Lx('บันทึกแล้ว','Logged')); } },
+    food: () => setTimeout(() => foodPicker(ds, () => dailySheet(ds)), 180),
+    daily: () => setTimeout(() => dailySheet(ds), 180),
+    med: () => setTimeout(() => medEditor(null), 180),
+    check: () => go('check'),
+    lock: () => lockNow()
+  };
+  $$('#sheetBody [data-q]').forEach(b => b.onclick = () => {
+    const f = act[b.dataset.q];
+    closeSheet();
+    if(f) f();
+  });
+}
+
 /* ---- แผ่นระบุยาที่แพ้ ---- */
 function allergySheet(back){
   const draw = () => {
@@ -5069,6 +5128,7 @@ function profileSheet(){
   };
   const others = DB.profiles.filter(x => x.id !== P.id);
   openSheet('<div class="shd"><b>โปรไฟล์ของฉัน</b><button class="btn sm ghost" onclick="closeSheet()">ปิด</button></div>'+
+    '<button class="btn ghost full sm" id="pLock" style="margin-bottom:16px">🔒 ล็อกหน้าจอทันที</button>'+
     '<div id="pBody"></div>'+
     '<button class="btn full" id="pSave">บันทึกข้อมูลส่วนตัว</button>'+
     '<div class="card" style="box-shadow:none;margin-top:16px"><h3>สลับผู้ใช้</h3>'+
@@ -5088,6 +5148,7 @@ function profileSheet(){
     DB.active = b.dataset.sw; save(); closeSheet(); lockNow();
   });
   $('#pAdd').onclick = () => { closeSheet(); setTimeout(newProfileFlow, 200); };
+  $('#pLock').onclick = () => { closeSheet(); setTimeout(lockNow, 150); };
   draw();
   $('#pSave').onclick = () => {
     if(window.__psync) window.__psync();
@@ -5493,7 +5554,7 @@ function paintTop(){
   paintBell(); paintCondBadge();
 }
 $('#whoTap').onclick = profileSheet;
-$('#btnLock').onclick = lockNow;
+$('#btnQuick').onclick = quickSheet;
 $('#btnProfile').onclick = profileSheet;
 
 /* ---- auto lock ---- */
@@ -5957,6 +6018,12 @@ const DICT = {
 'ระบุหรือแก้ไขโรคประจำตัว':'Set or edit your conditions','โรคประจำตัว':'Health conditions',
 'ระบุโรคประจำตัว':'Set your conditions','ยังไม่ได้ระบุ':'Not set','สุขภาพ':'Health',
 'คู่ยา':'Pairs','โรคประจำตัวและการตรวจยากับโรค':'Your conditions and how your medicines fit them',
+'บันทึกด่วน':'Quick log','บันทึกด่วน เพิ่มรายการ และล็อกหน้าจอ':'Quick log, add items, and lock the screen',
+'🔒 ล็อกหน้าจอทันที':'🔒 Lock the screen now','เพิ่มรายการยาหรืออาหารเสริม':'Add a medicine or supplement',
+'ตั้งเวลาและความถี่ใหม่':'Set up times and frequency','บันทึกว่ากินแล้ว':'Mark a dose taken',
+'ดื่มน้ำแล้วหนึ่งครั้ง':'Log one drink of water','บันทึกอาหาร':'Log food',
+'เลือกจากรายการอาหาร 136 รายการ':'Pick from 136 dishes','น้ำหนัก ความดัน การนอน และอื่น ๆ':'Weight, blood pressure, sleep and more',
+'ล็อกหน้าจอ':'Lock the screen','ตรวจคู่ยา':'Check a pair','บันทึกแล้ว':'Logged',
 'โปรไฟล์ของฉัน':'My profile','บันทึกข้อมูลส่วนตัว':'Save my details','สลับผู้ใช้':'Switch profile',
 'แต่ละคนมีรายการยา ประวัติ และรหัส PIN ของตัวเอง สลับแล้วต้องใส่รหัสของคนนั้น':'Each person keeps their own items, history and PIN. Switching asks for their PIN.',
 'ยังมีแค่โปรไฟล์เดียวในเครื่องนี้':'Only one profile on this device so far','เพิ่มโปรไฟล์ใหม่':'Add another profile',
@@ -6321,7 +6388,7 @@ function boot(){
 loadData().then(boot).catch(dataError);
 
 /* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
-const APP_VERSION = '30';
+const APP_VERSION = '31';
 let swReg = null, updWaiting = null, updReloading = false;
 function showUpdateBar(w){
   updWaiting = w;
