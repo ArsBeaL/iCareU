@@ -433,6 +433,10 @@ html[data-dark="1"] .scalerow button.on{color:#0E1419}
 .gtm label{font-size:11px;color:var(--ink-3)}
 .gtm input{width:104px;padding:6px 8px;font-size:13px;text-align:center}
 .rail.blank:before{display:none}
+.seg .tabn{display:inline-block;min-width:17px;padding:0 4px;margin-left:4px;border-radius:9px;
+  background:var(--line-2);color:var(--ink-2);font-size:10.5px;font-weight:700;line-height:17px;vertical-align:1px}
+.seg button.on .tabn{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent-ink)}
+html[data-dark="1"] .seg button.on .tabn{color:var(--accent)}
 .tlh{font-size:14px;font-weight:680;margin:0 0 10px;color:var(--ink-2)}
 .tl{position:relative;padding-left:56px}
 .tl:before{content:'';position:absolute;left:52px;top:6px;bottom:6px;width:1px;background:var(--line)}
@@ -515,16 +519,25 @@ html[data-dark="1"] .scalerow button.on{color:#0E1419}
         <i id="ringTx">0%</i>
       </div>
     </div>
-    <div id="tdWarn"></div>
-    <div id="tdAllergy"></div>
-    <div id="tdCond"></div>
-    <div id="tdDose"></div>
-    <div id="tdStock"></div>
-    <div id="tdWater"></div>
-    <div id="tdDaily"></div>
-    <div id="tdTimeline"></div>
+    <div class="seg" id="todayTabs" style="margin-bottom:16px">
+      <button data-tab="meds">ยาและอาหารเสริม</button>
+      <button data-tab="log">บันทึกของวันนี้</button>
+    </div>
     <div id="tdBackup"></div>
-    <div class="rail" id="rail"></div>
+    <div id="tabMeds">
+      <div id="tdWarn"></div>
+      <div id="tdAllergy"></div>
+      <div id="tdCond"></div>
+      <div id="tdDose"></div>
+      <div id="tdStock"></div>
+      <div class="rail" id="rail"></div>
+    </div>
+    <div id="tabLog" class="hide">
+      <div id="tdWater"></div>
+      <div id="tdDaily"></div>
+      <div id="tdTimeline"></div>
+      <div id="tdLogEmpty"></div>
+    </div>
   </section>
 
   <!-- ---- รายการยา ---- -->
@@ -3622,13 +3635,36 @@ function dayEvents(ds){
   });
   return out;
 }
+let todayTab = 'meds';
+function paintTodayTabs(){
+  const ds = todayStr();
+  const pending = dosesFor(ds).filter(d => !d.status).length;
+  const logs = dayEvents(ds).length;
+  $$('#todayTabs [data-tab]').forEach(b => {
+    b.classList.toggle('on', b.dataset.tab === todayTab);
+    const base = b.dataset.tab === 'meds' ? Lx('ยาและอาหารเสริม','Medicines') : Lx('บันทึกของวันนี้','Daily log');
+    const n = b.dataset.tab === 'meds' ? pending : logs;
+    b.innerHTML = esc(base) + (n ? ' <span class="tabn">' + n + '</span>' : '');
+  });
+  $('#tabMeds').classList.toggle('hide', todayTab !== 'meds');
+  $('#tabLog').classList.toggle('hide', todayTab !== 'log');
+  /* แท็บบันทึกที่ยังว่างเปล่า ควรบอกว่าเริ่มยังไง */
+  const em = $('#tdLogEmpty');
+  if(em) em.innerHTML = (todayTab === 'log' && !logs)
+    ? '<div class="empty"><div class="big">📝</div><p>' +
+      Lx('ยังไม่ได้บันทึกอะไรของวันนี้','Nothing logged for today yet') + '</p>'+
+      '<button class="btn" id="logEmptyAdd">' + Lx('เริ่มบันทึก','Start logging') + '</button></div>'
+    : '';
+  const ea = $('#logEmptyAdd');
+  if(ea) ea.onclick = () => dailySheet(todayStr());
+}
+$$('#todayTabs [data-tab]').forEach(b => b.onclick = () => { todayTab = b.dataset.tab; paintTodayTabs(); });
 function renderDailyTimeline(){
   const host = $('#tdTimeline'); if(!host) return;
   if(!P.settings.daily){ host.innerHTML = ''; return; }
   const ds = todayStr(), ev = dayEvents(ds);
   if(!ev.length){ host.innerHTML = ''; return; }
-  host.innerHTML = '<h3 class="tlh">' + Lx('บันทึกของวันนี้',"What you logged today") + '</h3>'+
-    '<div class="tl">' + ev.map((e,i) =>
+  host.innerHTML = '<div class="tl">' + ev.map((e,i) =>
       '<button class="tlrow" data-e="' + i + '">'+
       '<span class="tlt">' + (e.t ? e.t : '<i>' + Lx('ไม่ระบุ','—') + '</i>') + '</span>'+
       '<span class="tlc"><span class="pill">' + e.ic + '</span>'+
@@ -4155,6 +4191,7 @@ function renderToday(){
   renderWater();
   renderDailyCard();
   renderDailyTimeline();
+  paintTodayTabs();
   renderBackupNudge();
   $('#tdWarn').innerHTML = uniq.length ? (
     '<button class="mrow" id="warnBar" style="border-color:color-mix(in srgb,var(--danger) 32%,var(--line));'+
@@ -6281,7 +6318,8 @@ const DICT = {
 'แนวโน้มย้อนหลัง':'Trends over time','เลือกสิ่งที่อยากดู แล้วเลือกช่วงเวลา':'Pick what to look at, then a time range',
 'ชั่วโมงการนอน':'Hours of sleep','นาทีที่ขยับ':'Active minutes','พลังงานที่กิน':'Energy eaten',
 'ชีพจรขณะพัก':'Resting pulse','อารมณ์':'Mood','ความเครียด':'Stress','1 ปี':'1 year',
-'บันทึกของวันนี้':"What you logged today",'เวลา':'Time','จำนวนหน่วย':'Servings',
+'บันทึกของวันนี้':'Daily log','ยาและอาหารเสริม':'Medicines',
+'ยังไม่ได้บันทึกอะไรของวันนี้':'Nothing logged for today yet','เริ่มบันทึก':'Start logging','เวลา':'Time','จำนวนหน่วย':'Servings',
 'บันทึกการแก้ไข':'Save changes','ลบรายการนี้':'Remove this item','ไม่ระบุ':'—',
 'บันทึกประจำวัน':'Daily log','การเคลื่อนไหว':'Movement','จำนวนก้าว':'Steps',
 'เวลาที่ขยับร่างกาย':'Active minutes','แคลอรีจากกิจกรรม':'Active calories',
@@ -6698,7 +6736,7 @@ function boot(){
 loadData().then(boot).catch(dataError);
 
 /* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
-const APP_VERSION = '32';
+const APP_VERSION = '33';
 let swReg = null, updWaiting = null, updReloading = false;
 function showUpdateBar(w){
   updWaiting = w;
