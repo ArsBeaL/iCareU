@@ -161,6 +161,7 @@ html[data-dark="1"] .chip.meal{color:var(--accent)}
   font-size:12.5px;color:var(--danger);line-height:1.45}
 .link.mod{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 30%,transparent);color:var(--warn)}
 .link.good{background:var(--good-bg);border-color:color-mix(in srgb,var(--good) 28%,transparent);color:var(--good)}
+.link.info{background:var(--paper);border-color:var(--line);color:var(--ink-2)}
 .link b{font-weight:660}
 .link:before{content:"";position:absolute;left:-28px;top:12px;width:20px;height:2px;background:currentColor;opacity:.4}
 .nowmark{display:flex;align-items:center;gap:9px;margin:0 0 20px;position:relative}
@@ -314,6 +315,8 @@ html[data-dark="1"] .tagpick button.on{color:#0E1419}
 .shd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
 .shd b{font-size:18px;font-weight:670}
 .times{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+@keyframes missPulse{0%,100%{box-shadow:0 0 0 0 rgba(224,49,49,0)}35%{box-shadow:0 0 0 4px rgba(224,49,49,.28)}}
+.miss{animation:missPulse .8s ease 2;border-color:var(--danger)!important;color:var(--danger)!important}
 .tpill{display:inline-flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);
   border-radius:999px;padding:7px 8px 7px 13px;font-variant-numeric:tabular-nums;font-weight:600;font-size:14px}
 .tpill button{width:22px;height:22px;border-radius:50%;background:var(--line-2);color:var(--ink-2);
@@ -876,13 +879,219 @@ const TH_DOW = ['อาทิตย์','จันทร์','อังคาร
 const TH_DOW_S = ['อา','จ','อ','พ','พฤ','ศ','ส'];
 
 const MEAL = {
-  none:    {th:'ไม่ระบุ',            short:''},
-  before:  {th:'ก่อนอาหาร',          short:'ก่อนอาหาร'},
-  after:   {th:'หลังอาหาร',          short:'หลังอาหาร'},
-  with:    {th:'พร้อมอาหาร',         short:'พร้อมอาหาร'},
-  empty:   {th:'ตอนท้องว่าง',        short:'ท้องว่าง'},
-  bed:     {th:'ก่อนนอน',            short:'ก่อนนอน'}
+  none:    {th:'ไม่ระบุ',        en:'Not set',                short:'',              shortEn:''},
+  before:  {th:'ก่อนอาหาร',      en:'Before meals',           short:'ก่อนอาหาร',      shortEn:'Before meals'},
+  after:   {th:'หลังอาหาร',      en:'After meals',            short:'หลังอาหาร',      shortEn:'After meals'},
+  afterNow:{th:'หลังอาหารทันที', en:'Immediately after food', short:'หลังอาหารทันที', shortEn:'Immediately after food'},
+  with:    {th:'พร้อมอาหาร',     en:'With meals',             short:'พร้อมอาหาร',     shortEn:'With meals'},
+  empty:   {th:'ตอนท้องว่าง',    en:'On an empty stomach',    short:'ท้องว่าง',       shortEn:'Empty stomach'},
+  bed:     {th:'ก่อนนอน',        en:'At bedtime',             short:'ก่อนนอน',        shortEn:'At bedtime'}
 };
+/* ระยะห่างเป็นนาทีมีความหมายเฉพาะสองแบบนี้ แบบอื่นไม่ต้องนับนาที */
+function mealHasGap(k){ return k === 'before' || k === 'after'; }
+function mealShort(m){
+  const k = (m && m.meal) || 'none', M = MEAL[k] || MEAL.none;
+  if(!M.short) return '';
+  return M.short + (mealHasGap(k) && m && m.mealGap ? ' ' + m.mealGap + ' นาที' : '');
+}
+
+/* ---------------- ความสัมพันธ์กับมื้ออาหารตามเอกสารกำกับยา ----------------
+   ที่มาของแต่ละข้อมาจากเอกสารกำกับยาที่หน่วยงานกำกับดูแลอนุมัติเท่านั้น
+   ระบบจะเลือกให้อัตโนมัติเฉพาะรายการที่เอกสารกำกับยาระบุไว้ชัดเจน
+   รายการที่เอกสารระบุว่า "กินพร้อมอาหารหรือตอนท้องว่างก็ได้" จะไม่ถูกเลือกให้
+   ข้อมูลนี้เป็นค่าอ้างอิง ผู้สั่งใช้ยาคือแพทย์หรือเภสัชกร ถ้าฉลากที่ได้รับต่างจากนี้ ให้ทำตามฉลาก */
+const MEAL_SRC = {
+  fda:  {th:'เอกสารกำกับยาที่ US FDA อนุมัติ (DailyMed)', en:'US FDA-approved prescribing information (DailyMed)'},
+  smpc: {th:'สรุปคุณลักษณะผลิตภัณฑ์ยาของสหภาพยุโรปและสหราชอาณาจักร (SmPC)', en:'EU/UK Summary of Product Characteristics (SmPC)'},
+  tfda: {th:'เอกสารกำกับยาของไทยและบัญชียาหลักแห่งชาติ', en:'Thai FDA leaflet and the Thai National List of Essential Medicines'},
+  ods:  {th:'NIH Office of Dietary Supplements', en:'NIH Office of Dietary Supplements'}
+};
+/* [คีย์มื้ออาหาร, นาทีห่างจากมื้อ, คำอธิบายไทย, คำอธิบายอังกฤษ, ที่มา] */
+const MEAL_RULE = {
+  /* ยาแก้ปวดกลุ่ม NSAID ระคายกระเพาะ จึงให้กินทันทีหลังอาหาร */
+  'ibuprofen':      ['afterNow',0,'กินทันทีหลังอาหารพร้อมน้ำเต็มแก้ว ลดการระคายกระเพาะ','Take right after food with a full glass of water to reduce stomach irritation','tfda'],
+  'ibuprofen syrup':['afterNow',0,'ให้เด็กกินทันทีหลังอาหาร และไม่ให้ตอนเด็กขาดน้ำ','Give right after food, and not while the child is dehydrated','tfda'],
+  'naproxen':       ['afterNow',0,'กินทันทีหลังอาหารเพื่อลดการระคายกระเพาะ','Take right after food to reduce stomach irritation','fda'],
+  'diclofenac':     ['afterNow',0,'กินทันทีหลังอาหารเพื่อลดการระคายกระเพาะ','Take right after food to reduce stomach irritation','smpc'],
+  'piroxicam':      ['afterNow',0,'กินทันทีหลังอาหาร ยานี้ระคายกระเพาะมากและออกฤทธิ์ยาว','Take right after food; this one is long-acting and hard on the stomach','smpc'],
+  'mefenamic acid': ['afterNow',0,'เอกสารกำกับยาระบุให้กินพร้อมอาหาร','The label directs that it be taken with food','fda'],
+  'meloxicam':      ['afterNow',0,'กินทันทีหลังอาหารเพื่อลดการระคายกระเพาะ','Take right after food to reduce stomach irritation','smpc'],
+  'celecoxib':      ['afterNow',0,'เอกสารกำกับยาระบุว่ากินพร้อมหรือไม่พร้อมอาหารก็ได้ แต่ถ้ากินหลังอาหารจะระคายกระเพาะน้อยลง','The label allows it with or without food, but taking it after food is gentler on the stomach','fda'],
+  'etoricoxib':     ['afterNow',0,'เอกสารกำกับยาระบุว่ากินพร้อมหรือไม่พร้อมอาหารก็ได้ แต่อาหารจะทำให้ออกฤทธิ์ช้าลงเล็กน้อยและระคายกระเพาะน้อยลง','The label allows it with or without food; food slows the onset slightly and is gentler on the stomach','smpc'],
+  'aspirin low dose':['afterNow',0,'กินทันทีหลังอาหารพร้อมน้ำเต็มแก้ว ลดการระคายกระเพาะ','Take right after food with a full glass of water to reduce stomach irritation','tfda'],
+
+  /* ยาปฏิชีวนะ */
+  'amoxicillin/clavulanate':['with',0,'กินตอนเริ่มมื้ออาหาร ช่วยลดอาการคลื่นไส้และการดูดซึมดีขึ้น','Take at the start of a meal to reduce nausea and improve absorption','smpc'],
+  'amoxicillin-clavulanate suspension':['with',0,'ให้ตอนเริ่มมื้ออาหาร ช่วยลดอาการคลื่นไส้','Give at the start of a meal to reduce nausea','smpc'],
+  'doxycycline':    ['afterNow',0,'กินทันทีหลังอาหารพร้อมน้ำเต็มแก้ว และห่างจากนม ยาลดกรด แคลเซียม หรือธาตุเหล็กอย่างน้อย 2 ชั่วโมง','Take right after food with a full glass of water, and keep it at least 2 hours from milk, antacids, calcium or iron','fda'],
+  'doxycycline for acne':['afterNow',0,'กินทันทีหลังอาหารพร้อมน้ำเต็มแก้ว ไม่ล้มตัวนอนทันทีหลังกิน','Take right after food with a full glass of water, and do not lie down straight away','fda'],
+  'tetracycline':   ['empty',60,'กินก่อนอาหาร 1 ชั่วโมงหรือหลังอาหาร 2 ชั่วโมง และห่างจากนมกับยาลดกรด','Take 1 hour before or 2 hours after food, away from milk and antacids','fda'],
+  'norfloxacin':    ['empty',60,'กินก่อนอาหาร 1 ชั่วโมงหรือหลังอาหาร 2 ชั่วโมง','Take 1 hour before or 2 hours after food','fda'],
+  'roxithromycin':  ['before',15,'กินก่อนอาหารประมาณ 15 นาที','Take about 15 minutes before food','smpc'],
+  'metronidazole':  ['afterNow',0,'กินทันทีหลังอาหารเพื่อลดอาการคลื่นไส้ และห้ามดื่มแอลกอฮอล์ระหว่างใช้ยา','Take right after food to reduce nausea, and avoid alcohol while on it','fda'],
+  'metronidazole suspension':['afterNow',0,'ให้ทันทีหลังอาหารเพื่อลดอาการคลื่นไส้','Give right after food to reduce nausea','fda'],
+  'dicloxacillin':  ['empty',60,'กินตอนท้องว่าง ก่อนอาหาร 1 ชั่วโมงหรือหลังอาหาร 2 ชั่วโมง','Take on an empty stomach, 1 hour before or 2 hours after food','fda'],
+  'dicloxacillin suspension':['empty',60,'ให้ตอนท้องว่าง ก่อนอาหาร 1 ชั่วโมงหรือหลังอาหาร 2 ชั่วโมง','Give on an empty stomach, 1 hour before or 2 hours after food','fda'],
+  'co-trimoxazole suspension':['with',0,'ให้พร้อมอาหารและดื่มน้ำตามมาก ๆ','Give with food and plenty of fluid','fda'],
+  'albendazole':    ['with',0,'กินพร้อมอาหารที่มีไขมัน ช่วยให้ดูดซึมได้ดีขึ้น','Take with a fat-containing meal, which improves absorption','smpc'],
+
+  /* ยาความดันและหัวใจ */
+  'metoprolol':     ['afterNow',0,'เอกสารกำกับยาระบุให้กินพร้อมอาหารหรือทันทีหลังอาหาร และให้ทำเหมือนเดิมทุกวัน','The label directs that it be taken with or immediately following food, the same way each day','fda'],
+  'carvedilol':     ['with',0,'กินพร้อมอาหาร ช่วยชะลอการดูดซึมและลดอาการหน้ามืดตอนลุกยืน','Take with food, which slows absorption and reduces dizziness on standing','fda'],
+  'spironolactone': ['with',0,'กินพร้อมอาหาร ช่วยให้ดูดซึมได้มากขึ้น','Take with food, which increases how much is absorbed','fda'],
+  'isosorbide dinitrate':['empty',30,'กินตอนท้องว่าง ก่อนอาหาร 30 นาทีหรือหลังอาหาร 1–2 ชั่วโมง','Take on an empty stomach, 30 minutes before or 1–2 hours after food','fda'],
+  'rivaroxaban':    ['with',0,'ขนาด 15 และ 20 มิลลิกรัมต้องกินพร้อมอาหาร ไม่อย่างนั้นยาจะดูดซึมไม่ครบ','The 15 mg and 20 mg strengths must be taken with food, otherwise the dose is not fully absorbed','smpc'],
+  'dipyridamole':   ['before',60,'กินก่อนอาหารอย่างน้อย 1 ชั่วโมง','Take at least 1 hour before food','fda'],
+
+  /* ยาเบาหวาน */
+  'metformin':      ['with',0,'กินพร้อมอาหารหรือทันทีหลังอาหาร ลดอาการคลื่นไส้และท้องเสีย','Take with food or right after it to reduce nausea and diarrhoea','fda'],
+  'glipizide':      ['before',30,'กินก่อนอาหาร 30 นาที','Take 30 minutes before a meal','fda'],
+  'glibenclamide':  ['with',0,'กินพร้อมมื้อเช้าหรือมื้อหลักมื้อแรกของวัน','Take with breakfast or the first main meal of the day','smpc'],
+  'glimepiride':    ['with',0,'กินพร้อมมื้อเช้าหรือมื้อหลักมื้อแรกของวัน และห้ามข้ามมื้อนั้น','Take with breakfast or the first main meal, and do not skip that meal','fda'],
+  'acarbose':       ['with',0,'เคี้ยวพร้อมคำแรกของมื้ออาหาร ยาจึงจะทำงานกับแป้งในมื้อนั้น','Chew with the first bite of the meal so it can act on that meal’s starch','fda'],
+
+  /* ยาลดไขมัน */
+  'simvastatin':    ['bed',0,'กินตอนเย็นหรือก่อนนอน ร่างกายสร้างคอเลสเตอรอลมากที่สุดตอนกลางคืน','Take in the evening or at bedtime; the body makes most of its cholesterol overnight','fda'],
+  'gemfibrozil':    ['before',30,'กินก่อนอาหารเช้าและอาหารเย็น 30 นาที','Take 30 minutes before the morning and evening meals','fda'],
+  'fenofibrate':    ['with',0,'กินพร้อมอาหาร ช่วยให้ดูดซึมได้ดีขึ้น','Take with food, which improves absorption','tfda'],
+
+  /* ยาทางเดินอาหาร */
+  'omeprazole':     ['before',30,'กินก่อนอาหาร 30–60 นาที ยากลุ่มนี้ได้ผลดีที่สุดตอนกระเพาะเริ่มหลั่งกรด','Take 30–60 minutes before food; this group works best as the stomach starts making acid','fda'],
+  'esomeprazole':   ['before',30,'กินก่อนอาหาร 30–60 นาที','Take 30–60 minutes before food','fda'],
+  'pantoprazole':   ['before',30,'กินก่อนอาหาร 30–60 นาที','Take 30–60 minutes before food','fda'],
+  'lansoprazole':   ['before',30,'กินก่อนอาหาร 30–60 นาที','Take 30–60 minutes before food','fda'],
+  'aluminium/magnesium hydroxide':['after',60,'กินหลังอาหาร 1 ชั่วโมงและก่อนนอน และห่างจากยาอื่นอย่างน้อย 2 ชั่วโมง','Take 1 hour after meals and at bedtime, and keep it at least 2 hours from other medicines','tfda'],
+  'simethicone':    ['afterNow',0,'กินทันทีหลังอาหารและก่อนนอน','Take right after meals and at bedtime','tfda'],
+  'domperidone':    ['before',30,'กินก่อนอาหาร 15–30 นาที ยาจึงจะช่วยให้กระเพาะบีบตัวรับอาหาร','Take 15–30 minutes before food so it can get the stomach moving','smpc'],
+  'metoclopramide': ['before',30,'กินก่อนอาหาร 30 นาที','Take 30 minutes before food','fda'],
+  'bisacodyl':      ['bed',0,'กินก่อนนอน ยาจะออกฤทธิ์ในเช้าวันรุ่งขึ้น และห่างจากนมหรือยาลดกรด 1 ชั่วโมง','Take at bedtime so it works the next morning, and keep it 1 hour from milk or antacids','fda'],
+
+  /* ยาแก้แพ้และทางเดินหายใจ */
+  'fexofenadine':   ['empty',60,'กินกับน้ำเปล่าเท่านั้น เลี่ยงน้ำผลไม้และอาหารมัน เพราะลดการดูดซึม','Take with plain water only; fruit juice and fatty food cut absorption','fda'],
+  'montelukast':    ['bed',0,'กินตอนเย็นหรือก่อนนอน','Take in the evening or at bedtime','fda'],
+  'prednisolone':   ['afterNow',0,'กินทันทีหลังอาหาร ปกติให้รวมทั้งหมดในมื้อเช้า','Take right after food, usually the whole dose after breakfast','tfda'],
+  'prednisolone syrup':['afterNow',0,'ให้ทันทีหลังอาหาร ปกติให้ในมื้อเช้า','Give right after food, usually after breakfast','tfda'],
+  'dexamethasone':  ['afterNow',0,'กินทันทีหลังอาหารเพื่อลดการระคายกระเพาะ','Take right after food to reduce stomach irritation','tfda'],
+  'bromhexine':     ['afterNow',0,'กินทันทีหลังอาหาร','Take right after food','tfda'],
+
+  /* ฮอร์โมนและไทรอยด์ */
+  'levothyroxine':  ['empty',30,'กินตอนท้องว่างตอนเช้า ก่อนอาหาร 30–60 นาที และห่างจากแคลเซียมหรือธาตุเหล็กอย่างน้อย 4 ชั่วโมง','Take on an empty stomach in the morning, 30–60 minutes before food, and at least 4 hours from calcium or iron','fda'],
+
+  /* จิตเวชและระบบประสาท */
+  'amitriptyline':  ['bed',0,'กินก่อนนอน เพราะทำให้ง่วง','Take at bedtime because it causes drowsiness','smpc'],
+  'zolpidem':       ['bed',0,'กินตอนเข้านอนขณะท้องว่าง ไม่กินพร้อมหรือหลังอาหารทันที เพราะจะออกฤทธิ์ช้าลง','Take right at bedtime on an empty stomach; with or straight after a meal it works more slowly','fda'],
+  'phenytoin':      ['with',0,'กินพร้อมอาหารเพื่อลดการระคายกระเพาะ และห่างจากอาหารทางสายยาง 2 ชั่วโมง','Take with food to reduce stomach irritation, and keep it 2 hours from tube feeds','fda'],
+
+  /* เกาต์ กระดูก และข้อ */
+  'allopurinol':    ['after',0,'กินหลังอาหารเพื่อลดการระคายกระเพาะ และดื่มน้ำมาก ๆ','Take after food to reduce stomach irritation, and drink plenty of water','fda'],
+  'alendronate':    ['empty',30,'กินตอนเช้าทันทีที่ตื่น ก่อนอาหารหรือเครื่องดื่มอื่นอย่างน้อย 30 นาที ดื่มน้ำเปล่าเต็มแก้วและอยู่ในท่าตรงไม่ล้มตัวนอน','Take first thing in the morning, at least 30 minutes before any food or other drink, with a full glass of plain water, and stay upright','fda'],
+  'risedronate':    ['empty',30,'กินตอนเช้าทันทีที่ตื่น ก่อนอาหารหรือเครื่องดื่มอื่นอย่างน้อย 30 นาที ดื่มน้ำเปล่าเต็มแก้วและอยู่ในท่าตรง','Take first thing in the morning, at least 30 minutes before any food or other drink, with a full glass of plain water, and stay upright','fda'],
+  'calcium citrate':['with',0,'แคลเซียมซิเตรตกินพร้อมอาหารหรือตอนท้องว่างก็ได้ แต่กินพร้อมอาหารจะแน่นท้องน้อยกว่า และไม่เกินครั้งละ 500–600 มก.','Calcium citrate works with or without food, but with food it upsets the stomach less; no more than 500–600 mg at a time','ods'],
+  'calcium + vitamin d':['with',0,'กินพร้อมอาหาร แคลเซียมคาร์บอเนตต้องอาศัยกรดในกระเพาะช่วยละลาย','Take with food; calcium carbonate needs stomach acid to dissolve','ods'],
+
+  /* ทางเดินปัสสาวะและผิวหนัง */
+  'tamsulosin':     ['after',30,'กินหลังอาหารมื้อเดิมของทุกวันประมาณ 30 นาที','Take about 30 minutes after the same meal each day','fda'],
+  'isotretinoin':   ['with',0,'กินพร้อมอาหารที่มีไขมัน ถ้ากินตอนท้องว่างจะดูดซึมได้ราวครึ่งเดียว','Take with a fat-containing meal; on an empty stomach only about half is absorbed','fda'],
+  'itraconazole':   ['afterNow',0,'กินทันทีหลังอาหารมื้อหลัก ยาชนิดแคปซูลต้องอาศัยอาหารช่วยดูดซึม','Take right after a full meal; the capsules need food to be absorbed','fda'],
+
+  /* วิตามินและแร่ธาตุ */
+  'vitamin d3':     ['with',0,'กินพร้อมมื้อที่มีไขมัน เพราะเป็นวิตามินละลายในไขมัน','Take with a meal containing fat; it is a fat-soluble vitamin','ods'],
+  'vitamin a':      ['with',0,'กินพร้อมมื้อที่มีไขมัน เพราะเป็นวิตามินละลายในไขมัน','Take with a meal containing fat; it is a fat-soluble vitamin','ods'],
+  'vitamin e':      ['with',0,'กินพร้อมมื้อที่มีไขมัน เพราะเป็นวิตามินละลายในไขมัน','Take with a meal containing fat; it is a fat-soluble vitamin','ods'],
+  'vitamin k2 (mk-7)':['with',0,'กินพร้อมมื้อที่มีไขมัน เพราะเป็นวิตามินละลายในไขมัน','Take with a meal containing fat; it is a fat-soluble vitamin','ods'],
+  'multivitamin':   ['with',0,'กินพร้อมอาหาร ช่วยให้วิตามินที่ละลายในไขมันดูดซึมได้และลดอาการคลื่นไส้','Take with food so the fat-soluble vitamins are absorbed and to reduce nausea','ods'],
+  'vitamin b complex':['with',0,'กินพร้อมอาหาร ลดอาการคลื่นไส้','Take with food to reduce nausea','ods'],
+  'niacin':         ['with',0,'กินพร้อมอาหาร ลดอาการหน้าแดงร้อนวูบและการระคายกระเพาะ','Take with food to reduce flushing and stomach irritation','ods'],
+  'calcium carbonate':['with',0,'แคลเซียมคาร์บอเนตต้องอาศัยกรดในกระเพาะ จึงควรกินพร้อมอาหาร และไม่เกินครั้งละ 500–600 มก.','Calcium carbonate needs stomach acid, so take it with food, no more than 500–600 mg at a time','ods'],
+  'ferrous fumarate':['empty',60,'ดูดซึมดีที่สุดตอนท้องว่าง ถ้าระคายกระเพาะให้กินพร้อมอาหารได้ และอย่ากินพร้อมนม ชา กาแฟ หรือแคลเซียม','Absorbed best on an empty stomach; take it with food if it upsets you, but never with milk, tea, coffee or calcium','ods'],
+  'iron + folic acid':['empty',60,'ดูดซึมดีที่สุดตอนท้องว่าง และอย่ากินพร้อมนม ชา กาแฟ หรือแคลเซียม','Absorbed best on an empty stomach, and never with milk, tea, coffee or calcium','ods'],
+  'zinc':           ['empty',60,'กินก่อนอาหาร 1 ชั่วโมงหรือหลังอาหาร 2 ชั่วโมง ถ้าระคายกระเพาะให้กินพร้อมอาหารได้','Take 1 hour before or 2 hours after food; take it with food if it upsets you','ods'],
+  'magnesium':      ['with',0,'กินพร้อมอาหาร ลดอาการท้องเสีย','Take with food to reduce diarrhoea','ods'],
+  'magnesium glycinate':['with',0,'กินพร้อมอาหาร ลดอาการท้องเสีย','Take with food to reduce diarrhoea','ods'],
+
+  /* น้ำมันและสมุนไพร */
+  'fish oil':       ['with',0,'กินพร้อมมื้อที่มีไขมัน ดูดซึมดีขึ้นและลดการเรอกลิ่นปลา','Take with a meal containing fat; it absorbs better and cuts fishy burps','ods'],
+  'cod liver oil':  ['with',0,'กินพร้อมมื้อที่มีไขมัน','Take with a meal containing fat','ods'],
+  'krill oil':      ['with',0,'กินพร้อมมื้อที่มีไขมัน','Take with a meal containing fat','ods'],
+  'evening primrose oil':['with',0,'กินพร้อมมื้อที่มีไขมัน','Take with a meal containing fat','ods'],
+  'flaxseed oil':   ['with',0,'กินพร้อมมื้อที่มีไขมัน','Take with a meal containing fat','ods'],
+  'coenzyme q10':   ['with',0,'กินพร้อมมื้อที่มีไขมัน ดูดซึมได้ดีกว่ามาก','Take with a meal containing fat; absorption is much better','ods'],
+  'lutein':         ['with',0,'กินพร้อมมื้อที่มีไขมัน','Take with a meal containing fat','ods'],
+  'turmeric / curcumin':['with',0,'กินพร้อมมื้อที่มีไขมัน เคอร์คูมินละลายในไขมัน','Take with a meal containing fat; curcumin is fat-soluble','ods'],
+  'garlic extract': ['with',0,'กินพร้อมอาหาร ลดการระคายกระเพาะ','Take with food to reduce stomach irritation','ods'],
+  'ginger':         ['with',0,'กินพร้อมอาหาร ลดการระคายกระเพาะ','Take with food to reduce stomach irritation','ods'],
+  'st. john’s wort':['with',0,'กินพร้อมอาหาร และระวังยาอื่นหลายชนิดที่ถูกสมุนไพรนี้ลดฤทธิ์','Take with food, and watch out for the many medicines this herb weakens','ods'],
+  'st. john\'s wort':['with',0,'กินพร้อมอาหาร และระวังยาอื่นหลายชนิดที่ถูกสมุนไพรนี้ลดฤทธิ์','Take with food, and watch out for the many medicines this herb weakens','ods'],
+  'andrographis paniculata':['before',0,'ตำรับยาไทยระบุให้กินก่อนอาหารและก่อนนอน และไม่ใช้ติดต่อกันเกิน 7 วัน','Thai practice directs it before meals and at bedtime, and not for more than 7 days in a row','tfda'],
+  'senna':          ['bed',0,'กินก่อนนอน ยาจะออกฤทธิ์ในเช้าวันรุ่งขึ้น','Take at bedtime so it works the next morning','tfda'],
+  'red yeast rice': ['with',0,'กินพร้อมอาหารมื้อเย็น และห้ามกินคู่กับยาลดไขมันกลุ่มสแตติน','Take with the evening meal, and never alongside a statin','ods'],
+
+  /* อื่น ๆ */
+  'glucosamine sulfate':['with',0,'กินพร้อมอาหาร ลดอาการแน่นท้อง','Take with food to reduce stomach upset','ods'],
+  'glucosamine + chondroitin':['with',0,'กินพร้อมอาหาร ลดอาการแน่นท้อง','Take with food to reduce stomach upset','ods'],
+  'digestive enzymes':['with',0,'กินพร้อมคำแรกของมื้ออาหาร','Take with the first bite of the meal','ods'],
+  'melatonin':      ['bed',0,'กินก่อนนอนประมาณ 30–60 นาที และเลี่ยงแสงจ้าหลังกิน','Take about 30–60 minutes before bed, and avoid bright light afterwards','ods']
+};
+/* ถ้าไม่พบชื่อตรง ๆ ใช้กลุ่มสารออกฤทธิ์เป็นตัวช่วยแทน สำหรับยี่ห้อหรือยาที่ผู้ใช้เพิ่มเอง */
+const MEAL_RULE_TAG = {
+  nsaid:        ['afterNow',0,'ยากลุ่มแก้อักเสบที่ไม่ใช่สเตียรอยด์ระคายกระเพาะ ให้กินทันทีหลังอาหารพร้อมน้ำเต็มแก้ว','NSAIDs irritate the stomach, so take right after food with a full glass of water','tfda'],
+  steroid:      ['afterNow',0,'ยาสเตียรอยด์ระคายกระเพาะ ให้กินทันทีหลังอาหาร','Steroids irritate the stomach, so take right after food','tfda'],
+  bisphosphonate:['empty',30,'กินตอนเช้าทันทีที่ตื่น ก่อนอาหารหรือเครื่องดื่มอื่นอย่างน้อย 30 นาที ดื่มน้ำเปล่าเต็มแก้วและอยู่ในท่าตรง','Take first thing in the morning, at least 30 minutes before any food or other drink, with a full glass of plain water, and stay upright','fda'],
+  levothyroxine:['empty',30,'กินตอนท้องว่างตอนเช้า ก่อนอาหาร 30–60 นาที','Take on an empty stomach in the morning, 30–60 minutes before food','fda'],
+  tetracycline: ['empty',60,'กินก่อนอาหาร 1 ชั่วโมงหรือหลังอาหาร 2 ชั่วโมง และห่างจากนมกับยาลดกรด','Take 1 hour before or 2 hours after food, away from milk and antacids','fda'],
+  fishoil:      ['with',0,'กินพร้อมมื้อที่มีไขมัน ดูดซึมดีขึ้น','Take with a meal containing fat; it absorbs better','ods'],
+  vitD:         ['with',0,'กินพร้อมมื้อที่มีไขมัน เพราะเป็นวิตามินละลายในไขมัน','Take with a meal containing fat; it is a fat-soluble vitamin','ods'],
+  vitA:         ['with',0,'กินพร้อมมื้อที่มีไขมัน เพราะเป็นวิตามินละลายในไขมัน','Take with a meal containing fat; it is a fat-soluble vitamin','ods'],
+  vitE:         ['with',0,'กินพร้อมมื้อที่มีไขมัน เพราะเป็นวิตามินละลายในไขมัน','Take with a meal containing fat; it is a fat-soluble vitamin','ods'],
+  vitK:         ['with',0,'กินพร้อมมื้อที่มีไขมัน เพราะเป็นวิตามินละลายในไขมัน','Take with a meal containing fat; it is a fat-soluble vitamin','ods'],
+  iron:         ['empty',60,'ดูดซึมดีที่สุดตอนท้องว่าง และอย่ากินพร้อมนม ชา กาแฟ หรือแคลเซียม','Absorbed best on an empty stomach, and never with milk, tea, coffee or calcium','ods'],
+  calcium:      ['with',0,'กินพร้อมอาหาร และไม่เกินครั้งละ 500–600 มก.','Take with food, no more than 500–600 mg at a time','ods'],
+  melatonin:    ['bed',0,'กินก่อนนอนประมาณ 30–60 นาที','Take about 30–60 minutes before bed','ods'],
+  isotretinoin: ['with',0,'กินพร้อมอาหารที่มีไขมัน ถ้ากินตอนท้องว่างจะดูดซึมได้ราวครึ่งเดียว','Take with a fat-containing meal; on an empty stomach only about half is absorbed','fda'],
+  metformin:    ['with',0,'กินพร้อมอาหารหรือทันทีหลังอาหาร ลดอาการคลื่นไส้และท้องเสีย','Take with food or right after it to reduce nausea and diarrhoea','fda']
+};
+/* ตัดคำต่อท้ายที่บอกรูปแบบยาออก เพื่อให้ชื่อยี่ห้อและยาน้ำของเด็กจับคู่กับกฎเดียวกันได้ */
+function mealKeyNorm(s){
+  return String(s || '').toLowerCase().trim()
+    .replace(/\s*\d+(\.\d+)?\s*(mg|mcg|g|iu|ml|มก\.?|มคก\.?)\b.*$/,'')
+    .replace(/\s*(tablets?|capsules?|syrup|suspension|drops|inhaler|oral solution|for acne|low dose)\b/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+/* คืนคำแนะนำเรื่องมื้ออาหารของรายการนี้ ถ้าเอกสารกำกับยาระบุไว้ */
+const NO_MEAL_UNITS = ['พัฟ','เข็ม','แผ่นแปะ'];
+function mealRuleFor(d){
+  if(!d || d.type === 'water') return null;
+  /* ยาพ่น ยาฉีด และยาแปะ ไม่ผ่านกระเพาะ จึงไม่มีความสัมพันธ์กับมื้ออาหาร */
+  if(NO_MEAL_UNITS.includes(d.unit)) return null;
+  const tryKeys = [d.gen, d.nameEn, d.name];
+  for(let i=0;i<tryKeys.length;i++){
+    const raw = String(tryKeys[i] || '').toLowerCase().trim();
+    if(!raw) continue;
+    let r = MEAL_RULE[raw] || MEAL_RULE[mealKeyNorm(raw)];
+    if(r) return {m:r[0], gap:r[1], th:r[2], en:r[3], src:r[4]};
+  }
+  const tags = medTags(d);
+  for(let i=0;i<tags.length;i++){
+    const r = MEAL_RULE_TAG[tags[i]];
+    if(r) return {m:r[0], gap:r[1], th:r[2], en:r[3], src:r[4]};
+  }
+  return null;
+}
+/* เลือกให้อัตโนมัติ เฉพาะตอนที่ผู้ใช้ยังไม่ได้เลือกเอง */
+function autoMeal(d){
+  if(!d || d.mealPicked) return null;
+  const r = mealRuleFor(d);
+  if(!r){
+    /* ชื่อเปลี่ยนจนไม่ตรงกับรายการใดแล้ว ให้เก็บค่าที่ระบบเคยเลือกให้กลับไป */
+    if(d.mealAuto){ d.meal = 'none'; d.mealGap = 0; d.mealAuto = null; }
+    return null;
+  }
+  if(d.mealAuto === r.m && d.meal === r.m) return r;
+  d.meal = r.m;
+  d.mealGap = mealHasGap(r.m) ? (r.gap || 0) : 0;
+  d.mealAuto = r.m;
+  return r;
+}
 
 /* ---------------- สารออกฤทธิ์ / กลุ่มยา ที่ใช้จับคู่ ---------------- */
 const TAGS = {
@@ -1893,6 +2102,20 @@ function findGeneric(d){
   const hit = DRUGS.find(x => String(x.en).toLowerCase() === q || String(x.th).toLowerCase() === q);
   return hit ? hit.gen : null;
 }
+const TYPE_TH = {med:'ยา', supp:'อาหารเสริม', water:'น้ำดื่ม'};
+const TYPE_EN = {med:'a medicine', supp:'a supplement', water:'a drink'};
+/* ประเภทที่คลังยาบันทึกไว้สำหรับชื่อนี้ ใช้กันไม่ให้ยาถูกบันทึกเป็นอาหารเสริม */
+function libKind(d){
+  const names = [String(d.name || '').trim().toLowerCase(), String(d.nameEn || '').trim().toLowerCase()].filter(Boolean);
+  if(!names.length) return null;
+  for(let i = 0; i < DRUGS.length; i++){
+    const x = DRUGS[i];
+    if(x.custom) continue;
+    if(names.includes(String(x.th || '').toLowerCase()) || names.includes(String(x.en || '').toLowerCase()))
+      return (x.kind === 'supp' || x.kind === 'water') ? x.kind : 'med';
+  }
+  return null;
+}
 function knownDrug(d){
   const q = String(d.name || '').trim().toLowerCase();
   if(!q) return true;
@@ -1916,6 +2139,12 @@ function renderSug(inputSel, boxSel, kind){
     '</button>').join('');
   $$(boxSel + ' [data-s]').forEach(b => b.onclick = () => pickDrug(sugList[+b.dataset.s]));
 }
+/* วาดเฉพาะฟอร์มถ้าแผ่นแก้ไขเปิดอยู่แล้ว ไม่สร้างแผ่นใหม่ทั้งใบ
+   เพราะการสร้างใหม่จะเลื่อนกลับไปหัวฟอร์มและทำให้รู้สึกเหมือนถูกเด้งออก */
+function redrawEditor(){
+  if(document.getElementById('edBody') && $('#sheet').classList.contains('on')) drawEditor();
+  else openEditorSheet();
+}
 function pickDrug(x){
   if(!x) return;
   const d = draft;
@@ -1927,7 +2156,10 @@ function pickDrug(x){
   if(x.su) d.strengthUnit = x.su;
   d.type = (x.kind === 'supp' || x.kind === 'water') ? x.kind : 'med';
   if(d.type === 'water'){ d.nameEn = ''; d.gen = null; d.tags = []; d.tagsOff = []; d.avoid = []; d.stockOn = false; d.strengthUnit = 'mL'; if(!d.icon || d.icon === '💊') d.icon = '💧'; }
-  openEditorSheet();
+  const r = autoMeal(d);
+  redrawEditor();
+  if(r) toast(Lx('ตั้งให้กิน' + MEAL[r.m].th + 'ตามเอกสารกำกับยา แก้ไขได้',
+                 'Set to ' + (MEAL[r.m].en || '').toLowerCase() + ' from the label — you can change it'));
 }
 /* แถบชื่อสามัญ ยี่ห้ออื่น และขนาดที่มีขาย */
 function relatedBlock(d){
@@ -1964,7 +2196,7 @@ function bindRelated(d){
     if(window.__sync) window.__sync();
     const z = sizes[+b.dataset.sz];
     d.strength = z[0]; d.strengthUnit = z[1]; d.unit = z[2];
-    openEditorSheet();
+    redrawEditor();
   });
 }
 
@@ -4016,7 +4248,14 @@ function dismissSheet(){
   if(b) setTimeout(b, 180);
 }
 window.dismissSheet = dismissSheet;
-$('#sheet').addEventListener('click', e => { if(e.target.id === 'sheet') dismissSheet(); });
+/* ปิดแผ่นได้เฉพาะเมื่อกดเริ่มที่พื้นหลังจริง ๆ ถ้าปุ่มที่กดถูกวาดใหม่ระหว่างทาง
+   เบราว์เซอร์จะยิง click ไปที่พื้นหลังแทน ซึ่งเคยทำให้แผ่นปิดเองและต้องกรอกใหม่ทั้งหมด */
+let sheetDownBack = false;
+$('#sheet').addEventListener('pointerdown', e => { sheetDownBack = (e.target.id === 'sheet'); });
+$('#sheet').addEventListener('click', e => {
+  const ok = sheetDownBack; sheetDownBack = false;
+  if(e.target.id === 'sheet' && ok) dismissSheet();
+});
 
 function beep(){
   if(!P || !P.settings.sound) return;
@@ -4070,17 +4309,25 @@ function sortTags(keys){
   const loc = LANG === 'en' ? 'en' : 'th';
   return keys.slice().sort((a,b) => tagLabel(a).localeCompare(tagLabel(b), loc, {numeric:true, sensitivity:'base'}));
 }
+/* คำสั้น ๆ ที่เป็นอักษรโรมันต้องตรงทั้งคำ ไม่อย่างนั้น epa ใน lorazepam
+   จะถูกนับเป็นน้ำมันปลา และ dha ใน ชื่ออื่นก็เช่นกัน */
+function kwHit(hay, w){
+  w = String(w).toLowerCase();
+  if(!/^[a-z0-9 ]{1,4}$/.test(w)) return hay.includes(w);
+  const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('(^|[^a-z0-9])' + esc + '($|[^a-z0-9])').test(hay);
+}
 function medTags(m){
   if(m && m.type === 'water') return (m.tags || []).filter(k => !(m.tagsOff || []).includes(k));
   const set = new Set(m.tags || []);
   const hay = ((m.name||'') + ' ' + (m.nameEn||'')).toLowerCase();
-  for(const k in TAGS) if(TAGS[k].kw.some(w => hay.includes(w.toLowerCase()))) set.add(k);
+  for(const k in TAGS) if(TAGS[k].kw.some(w => kwHit(hay, w))) set.add(k);
   (m.tagsOff || []).forEach(k => set.delete(k));
   return Array.from(set);
 }
 function autoTags(text){
   const hay = String(text||'').toLowerCase(), out = [];
-  for(const k in TAGS) if(TAGS[k].kw.some(w => hay.includes(w.toLowerCase()))) out.push(k);
+  for(const k in TAGS) if(TAGS[k].kw.some(w => kwHit(hay, w))) out.push(k);
   return out;
 }
 /* ตรวจคู่จาก tag สองชุด */
@@ -4250,9 +4497,9 @@ function renderToday(){
             '<div class="t num">' + t + '</div><div class="tm">' + relTx + '</div>';
 
     g.forEach(d => {
-      const m = d.med, meal = MEAL[m.meal || 'none'];
+      const m = d.med, ms = mealShort(m);
       const chips = [];
-      if(meal.short) chips.push('<span class="chip meal">' + meal.short + (m.mealGap ? ' ' + m.mealGap + ' นาที' : '') + '</span>');
+      if(ms) chips.push('<span class="chip meal">' + ms + '</span>');
       if(m.dose) chips.push('<span class="chip">' + esc(m.dose) + '</span>');
       if(m.stockOn && m.stock !== null && m.stock <= (m.stockAlert || 7))
         chips.push('<span class="chip stock">เหลือ ' + m.stock + ' ' + esc(m.unit || 'เม็ด') + '</span>');
@@ -4359,14 +4606,14 @@ function renderMeds(){
     m.active && m.type === medFilterMode);
   $('#medsCount').textContent = P.meds.length ? (P.meds.filter(m=>m.active).length + ' รายการที่ใช้อยู่ จากทั้งหมด ' + P.meds.length) : 'ยังไม่มีรายการ';
   $('#medList').innerHTML = list.length ? list.map(m => {
-    const meal = MEAL[m.meal || 'none'];
+    const ms = mealShort(m);
     const tg = medTags(m);
     return '<div class="mrow' + (m.active ? '' : ' off') + '" style="align-items:center">'+
       '<button data-m="' + m.id + '" style="display:flex;gap:11px;align-items:center;flex:1;min-width:0;text-align:left;background:none">'+
       '<span class="pill">' + (m.icon || '💊') + '</span>'+
       '<span class="bd"><span class="nm">' + esc(m.name) + (m.dose ? ' <span style="font-weight:400;color:var(--ink-3);font-size:13px">' + esc(m.dose) + '</span>' : '') + '</span>'+
       '<span class="tt"><em>' + (m.times||[]).join(' · ') + '</em> · ' + freqText(m) +
-      (meal.short ? ' · ' + meal.short : '') +
+      (ms ? ' · ' + ms : '') +
       (m.stockOn && m.stock !== null && m.stock !== undefined ? ' · เหลือ ' + m.stock + ' ' + esc(m.unit || 'เม็ด') : '') +
       (m.active ? '' : ' · พักไว้') + '</span>'+
       (tg.length ? '<span class="chips">' + sortTags(tg).slice(0,3).map(t => '<span class="chip">' + esc(TAGS[t].th) + '</span>').join('') + '</span>' : '') +
@@ -4387,12 +4634,19 @@ function medEditor(med){
   draft = med ? JSON.parse(JSON.stringify(med)) : {
     id:uid(), name:'', nameEn:'', type:'supp', dose:'', icon:'💊', note:'',
     unit:'เม็ด', perDose:1, strength:null, strengthUnit:'mg',
-    times:['08:00'], freq:{mode:'daily', days:[0,1,2,3,4,5,6], mdays:[1], every:2},
-    meal:'none', mealGap:30, lead:null, tags:[], tagsOff:[], avoid:[],
+    times:[], freq:{mode:'daily', days:[0,1,2,3,4,5,6], mdays:[1], every:2},
+    meal:'none', mealGap:0, mealPicked:false, mealAuto:null, lead:null, tags:[], tagsOff:[], avoid:[],
     start:todayStr(), end:'', active:true,
     stockOn:false, stock:30, perDoseCount:1, stockAlert:7, gen:null
   };
   draftIsNew = !med;
+  /* รายการเก่าที่บันทึกไว้ก่อนมีระบบเลือกมื้ออาหารอัตโนมัติ ให้ถือว่าผู้ใช้เลือกเองแล้ว
+     ระบบจะได้ไม่ไปทับค่าที่ผู้ใช้ตั้งไว้ */
+  if(med){
+    if(draft.mealPicked === undefined) draft.mealPicked = !!(draft.meal && draft.meal !== 'none');
+    if(draft.mealGap === undefined) draft.mealGap = 0;
+    if(!mealHasGap(draft.meal)) draft.mealGap = 0;
+  }
   openEditorSheet();
 }
 function openEditorSheet(){
@@ -4465,6 +4719,54 @@ function applyTypeDefaults(d, prev){
     d.unit = 'เม็ด'; d.strength = null; d.strengthUnit = 'mg'; d.icon = '💊';
   }
 }
+/* คำอธิบายใต้ปุ่มความสัมพันธ์กับมื้ออาหาร บอกว่าระบบเลือกให้จากอะไรและอ้างอิงที่ไหน */
+function mealHint(d){
+  const r = mealRuleFor(d);
+  if(!r) return '';
+  const src = MEAL_SRC[r.src] || {th:'เอกสารกำกับยา', en:'the approved label'};
+  const same = (d.meal || 'none') === r.m;
+  const M = MEAL[r.m];
+  const head = same
+    ? (d.mealPicked ? Lx('ตรงกับเอกสารกำกับยา','Matches the approved label')
+                    : Lx('ระบบเลือกให้จากเอกสารกำกับยา','Chosen for you from the approved label'))
+    : Lx('เอกสารกำกับยาแนะนำ ' + M.th, 'The approved label recommends ' + String(M.en || '').toLowerCase());
+  return '<div class="link ' + (same ? 'info' : 'mod') + '" style="margin:10px 0 0">'+
+    '<b>' + esc(head) + '</b><br>' + esc(Lx(r.th, r.en)) +
+    '<br><span style="opacity:.7">' + esc(Lx('ที่มา: ' + src.th, 'Source: ' + src.en)) + '</span>'+
+    '<br><span style="opacity:.7">' + esc(Lx(
+      'ค่านี้เป็นค่าอ้างอิง ถ้าฉลากยาที่ได้รับระบุต่างจากนี้ ให้ทำตามฉลากและถามแพทย์หรือเภสัชกร',
+      'This is a reference value. If the label on your medicine says otherwise, follow the label and ask your doctor or pharmacist.')) + '</span>'+
+    (same ? '' : '<div class="tagpick" style="margin-top:9px"><button data-mealfix="' + r.m + '">' +
+      Lx('ใช้ค่าที่แนะนำ','Use the recommended one') + '</button></div>')+
+    '</div>';
+}
+function mealExtra(d){
+  return mealHint(d)+
+    (mealHasGap(d.meal) ? '<div style="display:flex;align-items:center;gap:10px;margin-top:10px">'+
+      '<span style="font-size:14px">ห่างจากมื้ออาหาร</span>'+
+      '<input id="fMealGap" type="number" min="0" max="180" step="5" value="' + (d.mealGap||30) + '" style="width:90px">'+
+      '<span style="font-size:14px">นาที</span></div>' : '');
+}
+/* อัปเดตเฉพาะส่วนคำแนะนำมื้ออาหาร ไม่วาดฟอร์มใหม่ทั้งใบ
+   เพราะการวาดใหม่ระหว่างที่ผู้ใช้กำลังแตะรายชื่อยา จะทำให้ปุ่มหายไปกลางคันและแผ่นปิดเอง */
+function refreshMeal(){
+  const d = draft, box = $('#fMealX');
+  if(!box) return;
+  $$('#fMeal button').forEach(b => b.classList.toggle('on', (d.meal || 'none') === b.dataset.v));
+  box.innerHTML = mealExtra(d);
+  bindMealExtra();
+}
+function bindMealExtra(){
+  const d = draft;
+  const gp = $('#fMealGap');
+  if(gp) gp.oninput = () => { d.mealGap = +gp.value || 0; };
+  $$('#fMealX [data-mealfix]').forEach(b => b.onclick = () => {
+    const r = mealRuleFor(d);
+    d.meal = b.dataset.mealfix; d.mealPicked = true;
+    d.mealGap = mealHasGap(d.meal) ? ((r && r.gap) || 30) : 0;
+    refreshMeal();
+  });
+}
 function drawEditor(){
   const d = draft, f = d.freq;
   const isWater = d.type === 'water';
@@ -4509,7 +4811,10 @@ function drawEditor(){
 
     '<div class="fld"><label class="fl">' + (isWater ? 'เวลาที่ต้องดื่ม' : 'เวลาที่ต้องกิน') + '</label><div class="times" id="fTimes">'+
       d.times.map((t,i) => '<span class="tpill num">' + t + '<button data-rm="' + i + '">×</button></span>').join('')+
-      '<button class="btn sm ghost" id="addTime">+ เพิ่มเวลา</button></div></div>'+
+      '<button class="btn sm ghost" id="addTime">+ เพิ่มเวลา</button></div>'+
+      (d.times.length ? '' : '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0;line-height:1.55" id="fTimesHint">'+
+        (isWater ? 'ยังไม่ได้ระบุเวลา แตะเพิ่มเวลาอย่างน้อยหนึ่งช่วง' : 'ยังไม่ได้ระบุเวลา ให้ใส่ตามที่แพทย์หรือเภสัชกรสั่ง อย่างน้อยหนึ่งเวลา') + '</p>')+
+    '</div>'+
 
     '<div class="fld"><label class="fl">ความถี่</label>'+
       '<div class="seg" id="fMode" style="margin-bottom:10px">'+
@@ -4529,10 +4834,7 @@ function drawEditor(){
     '<div class="fld"><label class="fl">ความสัมพันธ์กับมื้ออาหาร</label>'+
       '<div class="tagpick" id="fMeal">' + Object.keys(MEAL).map(k =>
         '<button data-v="' + k + '"' + ((d.meal||'none')===k?' class="on"':'') + '>' + MEAL[k].th + '</button>').join('') + '</div>'+
-      ((d.meal==='before'||d.meal==='after') ? '<div style="display:flex;align-items:center;gap:10px;margin-top:10px">'+
-        '<span style="font-size:14px">ห่างจากมื้ออาหาร</span>'+
-        '<input id="fMealGap" type="number" min="0" max="180" step="5" value="' + (d.mealGap||30) + '" style="width:90px">'+
-        '<span style="font-size:14px">นาที</span></div>' : '')+
+      '<div id="fMealX">' + mealExtra(d) + '</div>'+
     '</div>'+
 
     '<div class="fld"><label class="fl">เตือนล่วงหน้าเฉพาะรายการนี้</label>'+
@@ -4595,7 +4897,11 @@ function drawEditor(){
     const pv = g('#fDosePv');
     if(pv){
       const per = (d.perDose||1), n = (d.times||[]).length;
-      if(d.type === 'water'){
+      if(!n){
+        pv.textContent = d.type === 'water'
+          ? 'ใส่เวลาที่ต้องดื่มก่อน ระบบจะรวมปริมาณต่อวันให้'
+          : 'ใส่เวลาที่ต้องกินก่อน ระบบจะรวมยอดต่อวันและเตือนเมื่อได้รับเกินขนาด';
+      } else if(d.type === 'water'){
         const day = per * (d.strength || 0) * n;
         const w = P.body && P.body.weight;
         const tgt = w ? Math.round(w * 32 / 50) * 50 : null;
@@ -4614,10 +4920,12 @@ function drawEditor(){
   };
   ['#fName','#fNameEn','#fNote','#fStart','#fEnd','#fEvery','#fMealGap','#fStock','#fPerDose','#fStrength','#fAlert']
     .forEach(s => { const e = $(s); if(e) e.oninput = sync; });
+  /* ห้ามวาดฟอร์มใหม่ในจังหวะที่ event ของ select ยังไม่จบ ไม่อย่างนั้นเบราว์เซอร์
+     จะยิง click ต่อไปที่พื้นหลังแล้วแผ่นจะปิดเอง เลื่อนไปทำในรอบถัดไปแทน */
   ['#fUnit','#fSUnit'].forEach(s => { const e = $(s); if(e) e.onchange = () => {
     sync();
     if(d.type === 'water'){ d.strength = WATER_VOL[d.unit] || d.strength; }
-    drawEditor();
+    setTimeout(drawEditor, 0);
   }; });
   ['fStart','fEnd'].forEach(id => {
     const e = $('#' + id); if(!e) return;
@@ -4635,31 +4943,51 @@ function drawEditor(){
     sync();
     catalogPicker(x => {
       const it = x.it;
-      d.name = it[0]; d.nameEn = it[1]; d.type = x.g.g;
+      d.name = it[0]; d.nameEn = it[1]; d.gen = it[1]; d.type = x.g.g;
       d.tags = it[2].slice(); d.tagsOff = [];
       d.unit = it[3]; if(it[4]) d.strength = it[4]; d.strengthUnit = it[5];
+      autoMeal(d);
       openEditorSheet();
       toast('เลือก ' + it[0] + ' แล้ว ปรับขนาดและเวลาได้ตามที่แพทย์สั่ง');
     }, openEditorSheet);
   };
   if($('#fInfo')) $('#fInfo').onclick = () => { sync(); infoSheet(medTags(d), d.name || Lx('รายการนี้','this item'), d.nameEn, null, d.id, openEditorSheet); };
 
-  $('#fName').oninput = () => { sync(); renderSug('#fName', '#fSug', d.type); };
-  const en = $('#fNameEn'); if(en) en.oninput = () => { sync(); renderSug('#fNameEn', '#fSugEn'); };
+  /* พิมพ์ชื่อเองโดยไม่ได้เลือกจากรายการ ก็ยังได้คำแนะนำเรื่องมื้ออาหาร
+     อัปเดตเฉพาะกล่องคำแนะนำ ไม่แตะรายชื่อที่ผู้ใช้กำลังจะกด */
+  const nameTouched = () => { if(!d.mealPicked) autoMeal(d); refreshMeal(); };
+  $('#fName').oninput = () => { sync(); renderSug('#fName', '#fSug', d.type); nameTouched(); };
+  const en = $('#fNameEn'); if(en) en.oninput = () => { sync(); renderSug('#fNameEn', '#fSugEn'); nameTouched(); };
   if(!isWater) bindRelated(d);
   const addLib = $('#fAddLib');
   if(addLib) addLib.onclick = () => {
     sync();
     if(!d.name.trim()){ toast(Lx('ใส่ชื่อรายการก่อน','Enter a name first')); return; }
-    addCustomDrug(d); openEditorSheet();
+    addCustomDrug(d); redrawEditor();
   };
   $$('#fType button').forEach(b => b.onclick = () => {
-    sync(); const prev = d.type; d.type = b.dataset.v;
-    if(prev !== d.type) applyTypeDefaults(d, prev);
+    sync();
+    const want = b.dataset.v, prev = d.type;
+    if(want === prev) return;
+    /* ชื่อที่อยู่ในคลังยาแล้วต้องคงประเภทเดิมไว้ ไม่อย่างนั้นพาราเซตามอลจะถูกบันทึกเป็นอาหารเสริมได้ */
+    const lk = libKind(d);
+    if(lk && lk !== want){
+      toast(Lx('"' + String(d.name || '').trim() + '" อยู่ในคลังเป็น' + TYPE_TH[lk] + ' ถ้าต้องการบันทึกเป็น' + TYPE_TH[want] + ' ให้เปลี่ยนชื่อรายการก่อน',
+               '“' + String(d.name || '').trim() + '” is in the library as ' + TYPE_EN[lk] + '. Change the name first to save it as ' + TYPE_EN[want] + '.'));
+      return;
+    }
+    d.type = want;
+    applyTypeDefaults(d, prev);
+    if(!d.mealPicked){ d.meal = 'none'; d.mealGap = 0; d.mealAuto = null; autoMeal(d); }
     drawEditor();
   });
   $$('#fIcon button').forEach(b => b.onclick = () => { sync(); d.icon = b.dataset.i; drawEditor(); });
-  $$('#fMeal button').forEach(b => b.onclick = () => { sync(); d.meal = b.dataset.v; drawEditor(); });
+  $$('#fMeal button').forEach(b => b.onclick = () => {
+    sync(); d.meal = b.dataset.v; d.mealPicked = true;
+    d.mealGap = mealHasGap(d.meal) ? (d.mealGap || 30) : 0;
+    refreshMeal();
+  });
+  bindMealExtra();
   $$('#fMode button').forEach(b => b.onclick = () => { sync(); d.freq.mode = b.dataset.v; drawEditor(); });
   $$('#fLead button').forEach(b => {
     const v = b.dataset.v === '' ? null : +b.dataset.v;
@@ -4694,8 +5022,7 @@ function drawEditor(){
     drawEditor();
   });
   $$('#fTimes [data-rm]').forEach(b => b.onclick = () => {
-    sync(); if(d.times.length <= 1){ toast('ต้องมีอย่างน้อยหนึ่งเวลา'); return; }
-    d.times.splice(+b.dataset.rm, 1); drawEditor();
+    sync(); d.times.splice(+b.dataset.rm, 1); drawEditor();
   });
   $('#addTime').onclick = () => { sync(); askTime(t => { if(!d.times.includes(t)){ d.times.push(t); d.times.sort((a,b)=>toMin(a)-toMin(b)); } drawEditor(); }); };
   $('#fActive').onclick = () => { sync(); d.active = !d.active; drawEditor(); };
@@ -4717,18 +5044,30 @@ function askTime(cb){
   const inp = host.querySelector('#tPick'); inp.focus();
   host.querySelector('#tNo').onclick = () => host.remove();
   host.querySelector('#tOk').onclick = () => { const v = inp.value; host.remove(); if(v) cb(v); };
-  host.onclick = e => { if(e.target === host) host.remove(); };
+  let downBack = false;
+  host.addEventListener('pointerdown', e => { downBack = (e.target === host); });
+  host.addEventListener('click', e => { const ok = downBack; downBack = false; if(e.target === host && ok) host.remove(); });
 }
 function saveDraft(){
   if(window.__sync) window.__sync();
   const d = draft;
   if(!d.name.trim()){ toast('ใส่ชื่อรายการก่อน'); const n = $('#fName'); if(n) n.focus(); return; }
-  if(!d.times.length){ toast('ต้องมีอย่างน้อยหนึ่งเวลา'); return; }
+  if(!d.times.length){
+    toast(Lx('ยังไม่ได้ระบุเวลา ต้องมีอย่างน้อยหนึ่งเวลา','No time set yet — add at least one'));
+    const at = $('#addTime');
+    if(at){ at.scrollIntoView({behavior:'smooth', block:'center'}); at.classList.add('miss'); setTimeout(() => at.classList.remove('miss'), 1600); }
+    return;
+  }
   if(d.freq.mode === 'weekly' && !(d.freq.days||[]).length){ toast('เลือกวันในสัปดาห์อย่างน้อยหนึ่งวัน'); return; }
   if(d.freq.mode === 'monthday' && !(d.freq.mdays||[]).length){ toast('เลือกวันที่อย่างน้อยหนึ่งวัน'); return; }
   if(d.end && d.start && d.end < d.start){ toast('วันสิ้นสุดต้องอยู่หลังวันเริ่ม'); return; }
   d.name = d.name.trim();
   d.tags = d.tags || []; d.tagsOff = d.tagsOff || [];
+  /* กันไว้อีกชั้น เผื่อชื่อถูกพิมพ์เองโดยไม่ได้เลือกจากคลัง ยาต้องไม่ถูกบันทึกเป็นอาหารเสริม */
+  const lk = libKind(d), typeFixed = (lk && lk !== d.type) ? lk : null;
+  if(typeFixed){ d.type = typeFixed; applyTypeDefaults(d, d.type); }
+  if(!d.mealPicked) autoMeal(d);
+  if(!mealHasGap(d.meal)) d.mealGap = 0;
   /* คู่ที่ผู้ใช้เลือกไว้ ให้ผูกกลับสองทาง */
   P.meds.forEach(m => {
     if((d.avoid||[]).includes(m.id)){ m.avoid = m.avoid || []; if(!m.avoid.includes(d.id)) m.avoid.push(d.id); }
@@ -4748,6 +5087,9 @@ function saveDraft(){
   const conf = dayConflicts(dosesFor(todayStr())).filter(c => c.a.id === d.id || c.b.id === d.id);
   if(conf.length) toast('บันทึกแล้ว — แต่เวลานี้ชนกับ ' + (conf[0].a.id === d.id ? conf[0].b.name : conf[0].a.name));
   else toast(i >= 0 ? 'บันทึกการแก้ไขแล้ว' : 'เพิ่มรายการแล้ว');
+  if(typeFixed) setTimeout(() => toast(Lx(
+    '"' + d.name + '" อยู่ในคลังเป็น' + TYPE_TH[typeFixed] + ' ระบบจึงบันทึกเป็น' + TYPE_TH[typeFixed] + 'ให้แทน',
+    '“' + d.name + '” is in the library as ' + TYPE_EN[typeFixed] + ', so it was saved as that.')), 1800);
 }
 
 /* ================= ปฏิทิน ================= */
@@ -4812,7 +5154,7 @@ function renderCal(){
       (dayHas(selDate) ? Lx('ดูบันทึกของวันที่เลือก','See the log for this day')
                        : Lx('เพิ่มบันทึกของวันที่เลือก','Add a log for this day')) + '</button>'+
     ds.map(d => '<div class="row"><span class="pill">' + (d.med.icon||'💊') + '</span>'+
-      '<span class="g"><b>' + esc(d.med.name) + '</b><span class="num">' + d.time + (MEAL[d.med.meal||'none'].short ? ' · ' + MEAL[d.med.meal||'none'].short : '') + '</span></span>'+
+      '<span class="g"><b>' + esc(d.med.name) + '</b><span class="num">' + d.time + (mealShort(d.med) ? ' · ' + mealShort(d.med) : '') + '</span></span>'+
       '<span class="sev ' + (d.status === 'taken' ? 'good' : d.status === 'skipped' ? 'low' : selDate < todayStr() ? 'high' : 'low') + '">'+
       (d.status === 'taken' ? 'กินแล้ว' : d.status === 'skipped' ? 'ข้าม' : selDate < todayStr() ? 'ไม่ได้บันทึก' : 'รอ') + '</span></div>').join('') +
     '</div>';
@@ -4999,7 +5341,6 @@ function showAlarm(){
   if(!alarmQueue.length || $('#alarm').classList.contains('on')) return;
   const item = alarmQueue.shift(), d = item.d, m = d.med;
   alarmCur = item;
-  const meal = MEAL[m.meal || 'none'];
   const others = dosesFor(todayStr()).filter(o => o.med.id !== m.id && Math.abs(toMin(o.time) - toMin(d.time)) < 120);
   const warn = [];
   others.forEach(o => {
@@ -5023,7 +5364,7 @@ function showAlarm(){
     '<div class="lead">' + head + '</div>'+
     '<div class="tt num">' + d.time + '</div>'+
     '<div class="nn">' + esc(m.name) + (m.dose ? ' · ' + esc(m.dose) : '') + '</div>'+
-    (meal.short ? '<div style="margin-top:8px"><span class="chip meal">' + meal.short + (m.mealGap ? ' ' + m.mealGap + ' นาที' : '') + '</span></div>' : '')+
+    (mealShort(m) ? '<div style="margin-top:8px"><span class="chip meal">' + mealShort(m) + '</span></div>' : '')+
     '</div>'+
     (w.length ? w.map(x => '<div class="link ' + (x.r.sev === 'high' ? '' : 'mod') + '" style="margin-left:0">'+
       '<b>' + Lx('อย่ากินคู่กับ ','Do not take with ') + esc(x.name) + '</b><br>' + esc(RT(x.r,'x')) + '</div>').join('') : '')+
@@ -5045,7 +5386,7 @@ function showAlarm(){
   $('#alarm').classList.add('on');
   beep();
   fireNoti(head + ' · ' + d.time, m.name + (m.dose ? ' ' + m.dose : '') +
-    (meal.short ? ' (' + meal.short + ')' : '') + (w.length ? '\n⚠ อย่ากินคู่กับ ' + w[0].name : ''));
+    (mealShort(m) ? ' (' + mealShort(m) + ')' : '') + (w.length ? '\n⚠ อย่ากินคู่กับ ' + w[0].name : ''));
 
   const close = () => { alarmCur = null; $('#alarm').classList.remove('on'); setTimeout(showAlarm, 350); };
   $('#alTake').onclick = () => { setLog(d.key, 'taken'); close(); toast('บันทึกว่ากินแล้ว'); };
@@ -5849,7 +6190,7 @@ function notifSheet(){
       '<span class="pill">' + (d.med.icon || '💊') + '</span>'+
       '<span class="bd"><span class="nm">' + esc(d.med.name) + '</span>'+
       '<span class="tt"><em>' + d.time + '</em>' +
-        (MEAL[d.med.meal || 'none'].short ? ' · ' + MEAL[d.med.meal || 'none'].short : '') +
+        (mealShort(d.med) ? ' · ' + mealShort(d.med) : '') +
         (wait ? ' · <span style="color:var(--warn)">' + Lx('รออีก ','wait ') +
           '<b class="num" data-until="' + wait.until + '">' + fmtCountdown(wait.until - Date.now()) + '</b></span>' : '') +
       '</span></span>'+
@@ -6457,6 +6798,13 @@ const UNIT_EN = {'เม็ด':'tablet','แคปซูล':'capsule','ซอ�
  'มก.':'mg','มคก.':'mcg','ก.':'g','มล.':'mL','พันล้าน CFU':'billion CFU',
  'มก. (มิลลิกรัม)':'mg (milligram)','มคก. (ไมโครกรัม)':'mcg (microgram)','ก. (กรัม)':'g (gram)',
  'IU (หน่วยสากล)':'IU (international unit)','มล. (มิลลิลิตร)':'mL (millilitre)','พันล้าน CFU':'billion CFU',
+ 'ใส่เวลาที่ต้องกินก่อน ระบบจะรวมยอดต่อวันและเตือนเมื่อได้รับเกินขนาด':
+   'Add the times first, then the app totals the daily amount and warns you if it goes over.',
+ 'ใส่เวลาที่ต้องดื่มก่อน ระบบจะรวมปริมาณต่อวันให้':'Add the times first, then the app totals the daily amount.',
+ 'ยังไม่ได้ระบุเวลา ให้ใส่ตามที่แพทย์หรือเภสัชกรสั่ง อย่างน้อยหนึ่งเวลา':
+   'No time set yet. Add at least one, following what your doctor or pharmacist told you.',
+ 'ยังไม่ได้ระบุเวลา แตะเพิ่มเวลาอย่างน้อยหนึ่งช่วง':'No time set yet. Tap to add at least one.',
+ 'หลังอาหารทันที':'Immediately after food',
  'ก่อนอาหาร':'Before meals','หลังอาหาร':'After meals','พร้อมอาหาร':'With meals','ตอนท้องว่าง':'On an empty stomach',
  'ท้องว่าง':'Empty stomach','ก่อนนอน':'At bedtime','ปี':'years','กก.':'kg','ซม.':'cm','ไม่ระบุเพศ':'sex not stated'};
 Object.assign(DICT, UNIT_EN);
@@ -6475,6 +6823,14 @@ Object.assign(DICT, {
 /* สร้างคำแปลอัตโนมัติจากข้อมูลที่เป็นสองภาษาอยู่แล้ว */
 function buildAutoDict(){
   Object.keys(TAGS).forEach(k => { if(TAGS[k].th && TAGS[k].en && !DICT[TAGS[k].th]) DICT[TAGS[k].th] = TAGS[k].en; });
+  Object.keys(MEAL).forEach(k => {
+    const M = MEAL[k];
+    if(M.th && M.en && !DICT[M.th]) DICT[M.th] = M.en;
+    if(M.short && M.shortEn && !DICT[M.short]) DICT[M.short] = M.shortEn;
+  });
+  Object.keys(MEAL_RULE).forEach(k => { const r = MEAL_RULE[k]; if(r[2] && r[3] && !DICT[r[2]]) DICT[r[2]] = r[3]; });
+  Object.keys(MEAL_RULE_TAG).forEach(k => { const r = MEAL_RULE_TAG[k]; if(r[2] && r[3] && !DICT[r[2]]) DICT[r[2]] = r[3]; });
+  Object.keys(MEAL_SRC).forEach(k => { const s = MEAL_SRC[k]; if(s.th && s.en && !DICT[s.th]) DICT[s.th] = s.en; });
   CATALOG.forEach(g => g.it.forEach(it => { if(!DICT[it[0]]) DICT[it[0]] = it[1]; }));
   TH_MON.forEach((m,i) => DICT[m] = EN_MON[i]);
   TH_DOW.forEach((d,i) => DICT[d] = EN_DOW[i]);
@@ -6736,7 +7092,7 @@ function boot(){
 loadData().then(boot).catch(dataError);
 
 /* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
-const APP_VERSION = '33';
+const APP_VERSION = '34';
 let swReg = null, updWaiting = null, updReloading = false;
 function showUpdateBar(w){
   updWaiting = w;
