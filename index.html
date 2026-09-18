@@ -315,6 +315,15 @@ html[data-dark="1"] .tagpick button.on{color:#0E1419}
 .shd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
 .shd b{font-size:18px;font-weight:670}
 .times{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.crow{padding:11px 0;border-bottom:1px solid var(--line)}
+.crow:last-child{border-bottom:0;padding-bottom:2px}
+.crow .cnm{display:flex;flex-direction:column;gap:2px;margin-bottom:7px}
+.crow .cnm b{font-size:13.5px;font-weight:620}
+.crow .cnm span{font-size:11.5px;color:var(--ink-3)}
+.crow .cin{display:flex;gap:8px;align-items:center}
+.crow .cin input{flex:1;min-width:0}
+.crow .cin select{width:118px;flex:none}
+.crow .cin button{flex:none;width:42px;padding:8px 0;font-size:16px}
 @keyframes missPulse{0%,100%{box-shadow:0 0 0 0 rgba(224,49,49,0)}35%{box-shadow:0 0 0 4px rgba(224,49,49,.28)}}
 .miss{animation:missPulse .8s ease 2;border-color:var(--danger)!important;color:var(--danger)!important}
 .tpill{display:inline-flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);
@@ -895,6 +904,173 @@ function mealShort(m){
   return M.short + (mealHasGap(k) && m && m.mealGap ? ' ' + m.mealGap + ' นาที' : '');
 }
 
+/* ---------------- สารอาหารที่ใช้เป็นส่วนประกอบของวิตามินรวม ----------------
+   ใช้กับอาหารเสริมที่มีหลายสารใน 1 เม็ด ผู้ใช้เลือกสารและกรอกปริมาณต่อหน่วยเอง
+   ช่อง tag ชี้ไปที่ทะเบียนสารออกฤทธิ์ ทำให้ปริมาณที่กรอกเข้าไปถูกนำไปตรวจคู่ยา
+   และเทียบกับเพดานสูงสุดกับ Thai RDI ได้เหมือนอาหารเสริมชนิดสารเดียว
+   สารที่ไม่มี tag ยังบันทึกและแสดงได้ แต่ไม่มีเกณฑ์ให้เทียบ */
+const NUT_GROUPS = [
+  {g:'vit', th:'วิตามิน',            en:'Vitamins'},
+  {g:'min', th:'แร่ธาตุ',            en:'Minerals'},
+  {g:'oth', th:'สารอาหารอื่น ๆ',     en:'Other nutrients'}
+];
+const NUTRIENTS = {
+  vitA:       {th:'วิตามินเอ',            en:'Vitamin A',            u:'mcg', g:'vit', tag:'vitA'},
+  vitD:       {th:'วิตามินดี',            en:'Vitamin D',            u:'IU',  g:'vit', tag:'vitD'},
+  vitE:       {th:'วิตามินอี',            en:'Vitamin E',            u:'IU',  g:'vit', tag:'vitE'},
+  vitK:       {th:'วิตามินเค',            en:'Vitamin K',            u:'mcg', g:'vit', tag:'vitK'},
+  vitC:       {th:'วิตามินซี',            en:'Vitamin C',            u:'mg',  g:'vit', tag:'vitC'},
+  vitB1:      {th:'วิตามินบี 1 (ไทอามีน)', en:'Vitamin B1 (thiamine)', u:'mg', g:'vit', tag:'vitB1'},
+  vitB2:      {th:'วิตามินบี 2 (ไรโบฟลาวิน)', en:'Vitamin B2 (riboflavin)', u:'mg', g:'vit', tag:'vitB2'},
+  niacin:     {th:'ไนอาซิน (บี 3)',       en:'Niacin (B3)',          u:'mg',  g:'vit', tag:'niacin'},
+  vitB5:      {th:'กรดแพนโทธีนิก (บี 5)',  en:'Pantothenic acid (B5)', u:'mg', g:'vit', tag:'vitB5'},
+  vitB6:      {th:'วิตามินบี 6',          en:'Vitamin B6',           u:'mg',  g:'vit', tag:'vitB6'},
+  biotin:     {th:'ไบโอติน (บี 7)',       en:'Biotin (B7)',          u:'mcg', g:'vit', tag:'biotin'},
+  folate:     {th:'กรดโฟลิก (บี 9)',      en:'Folic acid (B9)',      u:'mcg', g:'vit', tag:'folate'},
+  b12:        {th:'วิตามินบี 12',         en:'Vitamin B12',          u:'mcg', g:'vit', tag:'b12'},
+  calcium:    {th:'แคลเซียม',             en:'Calcium',              u:'mg',  g:'min', tag:'calcium'},
+  phosphorus: {th:'ฟอสฟอรัส',             en:'Phosphorus',           u:'mg',  g:'min', tag:'phosphorus'},
+  magnesium:  {th:'แมกนีเซียม',           en:'Magnesium',            u:'mg',  g:'min', tag:'magnesium'},
+  iron:       {th:'ธาตุเหล็ก',            en:'Iron',                 u:'mg',  g:'min', tag:'iron'},
+  zinc:       {th:'สังกะสี',              en:'Zinc',                 u:'mg',  g:'min', tag:'zinc'},
+  iodine:     {th:'ไอโอดีน',              en:'Iodine',               u:'mcg', g:'min', tag:'iodine'},
+  selenium:   {th:'ซีลีเนียม',            en:'Selenium',             u:'mcg', g:'min', tag:'selenium'},
+  copper:     {th:'ทองแดง',               en:'Copper',               u:'mg',  g:'min', tag:'copper'},
+  manganese:  {th:'แมงกานีส',             en:'Manganese',            u:'mg',  g:'min', tag:'manganese'},
+  chromium:   {th:'โครเมียม',             en:'Chromium',             u:'mcg', g:'min', tag:'chromium'},
+  molybdenum: {th:'โมลิบดีนัม',           en:'Molybdenum',           u:'mcg', g:'min', tag:'molybdenum'},
+  potassium:  {th:'โพแทสเซียม',           en:'Potassium',            u:'mg',  g:'min', tag:'potassium'},
+  chloride:   {th:'คลอไรด์',              en:'Chloride',             u:'mg',  g:'min'},
+  boron:      {th:'โบรอน',                en:'Boron',                u:'mcg', g:'min'},
+  silicon:    {th:'ซิลิกอน',              en:'Silicon',              u:'mg',  g:'min'},
+  vanadium:   {th:'วาเนเดียม',            en:'Vanadium',             u:'mcg', g:'min'},
+  choline:    {th:'โคลีน',                en:'Choline',              u:'mg',  g:'oth', tag:'choline'},
+  inositol:   {th:'อิโนซิทอล',            en:'Inositol',             u:'mg',  g:'oth'},
+  lutein:     {th:'ลูทีน',                en:'Lutein',               u:'mcg', g:'oth', tag:'lutein'},
+  lycopene:   {th:'ไลโคปีน',              en:'Lycopene',             u:'mcg', g:'oth'},
+  betacarotene:{th:'เบต้าแคโรทีน',        en:'Beta-carotene',        u:'mcg', g:'oth'},
+  coq10:      {th:'โคเอนไซม์ คิวเท็น',     en:'Coenzyme Q10',         u:'mg',  g:'oth', tag:'coq10'},
+  fishoil:    {th:'น้ำมันปลา (EPA+DHA)',   en:'Fish oil (EPA+DHA)',   u:'mg',  g:'oth', tag:'fishoil'},
+  ginseng:    {th:'สารสกัดโสม',           en:'Ginseng extract',      u:'mg',  g:'oth'},
+  ginkgo:     {th:'สารสกัดแปะก๊วย',        en:'Ginkgo biloba extract', u:'mg', g:'oth', tag:'ginkgo'},
+  collagen:   {th:'คอลลาเจน',             en:'Collagen',             u:'mg',  g:'oth', tag:'collagen'},
+  glucosamine:{th:'กลูโคซามีน',           en:'Glucosamine',          u:'mg',  g:'oth', tag:'glucosamine'},
+  probiotic:  {th:'โพรไบโอติก',           en:'Probiotics',           u:'CFU', g:'oth', tag:'probiotic'}
+};
+function nutLabel(k){ const N = NUTRIENTS[k]; return N ? Lx(N.th, N.en) : k; }
+/* ชื่อหน่วยตามภาษาที่เลือก ใช้ตอนประกอบประโยคเอง ซึ่งชั้นแปลอัตโนมัติจับไม่ได้ */
+function unitTx(u){
+  u = u || 'เม็ด';
+  return (typeof LANG !== 'undefined' && LANG === 'en') ? ((typeof DICT !== 'undefined' && DICT[u]) || u) : u;
+}
+function hasComp(m){ return !!(m && m.comp && m.comp.length); }
+/* ปริมาณของสารหนึ่งใน 1 หน่วย คืน null ถ้าไม่มี */
+function compAmt(m, k){
+  if(!hasComp(m)) return null;
+  const c = m.comp.find(x => x.k === k);
+  return c ? {amt:+c.amt || 0, u:c.u} : null;
+}
+
+/* ---------------- สูตรวิตามินรวมที่มีขายจริง ----------------
+   ใช้เป็นจุดตั้งต้นให้ผู้ใช้ไม่ต้องพิมพ์ทีละบรรทัด เลือกแล้วแก้ไขได้ทุกค่า
+   ทุกสูตรคัดลอกจากฉลากที่เผยแพร่โดยผู้ผลิตหรือฐานข้อมูลฉลากของ NIH
+   สูตรของผู้ผลิตเปลี่ยนได้ตลอด ให้ยึดตามขวดที่ถืออยู่จริงเสมอ */
+const MV_SRC = {
+  dsld: {th:'NIH Dietary Supplement Label Database (ฉลากที่จำหน่ายในสหรัฐอเมริกา)',
+         en:'NIH Dietary Supplement Label Database (US label)'},
+  mega: {th:'เว็บไซต์ทางการของ MEGA We Care ประเทศไทย', en:'MEGA We Care Thailand official website'},
+  rdi:  {th:'ประกาศกระทรวงสาธารณสุขว่าด้วยฉลากโภชนาการ (Thai RDI)',
+         en:'Thai Ministry of Public Health nutrition labelling notification (Thai RDI)'}
+};
+const MULTIVIT = [
+  { id:'thairdi', th:'วิตามินรวมมาตรฐาน 100% Thai RDI', en:'Standard multivitamin at 100% Thai RDI',
+    brand:'', unit:'เม็ด', src:'rdi', region:'th',
+    note:'ไม่ใช่สินค้ายี่ห้อใด เป็นชุดค่าตั้งต้นที่ให้สารอาหารเท่ากับ Thai RDI พอดี ใช้เป็นจุดเริ่มแล้วแก้ให้ตรงกับขวดของคุณ',
+    noteEn:'Not a branded product — a starting set that matches the Thai RDI exactly. Edit it to match your own bottle.',
+    comp:[['vitA',800,'mcg'],['vitD',5,'mcg'],['vitE',10,'mg'],['vitK',80,'mcg'],['vitC',60,'mg'],
+          ['vitB1',1.5,'mg'],['vitB2',1.7,'mg'],['niacin',20,'mg'],['vitB5',6,'mg'],['vitB6',2,'mg'],
+          ['biotin',150,'mcg'],['folate',200,'mcg'],['b12',2,'mcg'],
+          ['calcium',800,'mg'],['phosphorus',800,'mg'],['magnesium',350,'mg'],['iron',15,'mg'],
+          ['zinc',15,'mg'],['iodine',150,'mcg'],['selenium',70,'mcg'],['copper',2,'mg'],
+          ['manganese',3.5,'mg'],['chromium',130,'mcg'],['molybdenum',160,'mcg'],['potassium',3500,'mg']] },
+
+  { id:'natb', th:'MEGA We Care Nat B', en:'MEGA We Care Nat B',
+    brand:'MEGA We Care', unit:'แคปซูล', src:'mega', region:'th',
+    comp:[['vitB1',50,'mg'],['vitB2',50,'mg'],['niacin',50,'mg'],['vitB5',50,'mg'],['vitB6',50,'mg'],
+          ['b12',50,'mcg'],['folate',100,'mcg'],['choline',50,'mg'],['biotin',50,'mcg'],['inositol',50,'mg']] },
+
+  { id:'multilives', th:'MEGA We Care Multilives', en:'MEGA We Care Multilives',
+    brand:'MEGA We Care', unit:'แคปซูล', src:'mega', region:'th',
+    comp:[['vitA',2500,'IU'],['vitB1',1.5,'mg'],['vitB2',1.5,'mg'],['niacin',20,'mg'],['vitB6',2,'mg'],
+          ['b12',2,'mcg'],['vitC',50,'mg'],['vitD',200,'IU'],['vitE',15,'IU'],['folate',200,'mcg'],
+          ['vitB5',6,'mg'],['biotin',50,'mcg'],['calcium',120,'mg'],['magnesium',100,'mg'],
+          ['iron',15,'mg'],['zinc',15,'mg'],['selenium',70,'mcg'],['chromium',100,'mcg'],
+          ['coq10',20,'mg'],['lutein',1200,'mcg'],['inositol',25,'mg']] },
+
+  { id:'centrumsilver', th:'Centrum Silver Adults 50+', en:'Centrum Silver Adults 50+',
+    brand:'Centrum', unit:'เม็ด', src:'dsld', region:'intl',
+    comp:[['vitA',750,'mcg'],['vitC',60,'mg'],['vitD',25,'mcg'],['vitE',22.5,'mg'],['vitK',30,'mcg'],
+          ['vitB1',1.5,'mg'],['vitB2',1.7,'mg'],['niacin',20,'mg'],['vitB6',3,'mg'],['folate',400,'mcg'],
+          ['b12',25,'mcg'],['biotin',30,'mcg'],['vitB5',10,'mg'],['calcium',220,'mg'],
+          ['phosphorus',20,'mg'],['iodine',150,'mcg'],['magnesium',50,'mg'],['zinc',11,'mg'],
+          ['selenium',19,'mcg'],['copper',0.5,'mg'],['manganese',2.3,'mg'],['chromium',50,'mcg'],
+          ['molybdenum',45,'mcg'],['chloride',72,'mg'],['potassium',80,'mg'],
+          ['lutein',250,'mcg'],['lycopene',300,'mcg']] },
+
+  { id:'kirkland', th:'Kirkland Signature Daily Multi', en:'Kirkland Signature Daily Multi',
+    brand:'Kirkland Signature', unit:'เม็ด', src:'dsld', region:'intl',
+    comp:[['vitA',1050,'mcg'],['vitC',90,'mg'],['vitD',10,'mcg'],['vitE',13.5,'mg'],['vitK',25,'mcg'],
+          ['vitB1',1.5,'mg'],['vitB2',1.7,'mg'],['niacin',20,'mg'],['vitB6',2,'mg'],['folate',500,'mcg'],
+          ['b12',6,'mcg'],['biotin',30,'mcg'],['vitB5',10,'mg'],['calcium',200,'mg'],['iron',18,'mg'],
+          ['phosphorus',109,'mg'],['iodine',150,'mcg'],['magnesium',100,'mg'],['zinc',11,'mg'],
+          ['selenium',55,'mcg'],['copper',0.9,'mg'],['manganese',2.3,'mg'],['chromium',35,'mcg'],
+          ['molybdenum',45,'mcg'],['chloride',72,'mg'],['potassium',80,'mg'],['silicon',2,'mg'],
+          ['lycopene',300,'mcg'],['lutein',250,'mcg'],['boron',150,'mcg'],['vanadium',10,'mcg']] },
+
+  { id:'naturemade', th:'Nature Made Multi Complete', en:'Nature Made Multi Complete',
+    brand:'Nature Made', unit:'ซอฟท์เจล', src:'dsld', region:'intl',
+    comp:[['vitA',2500,'IU'],['vitC',60,'mg'],['vitD',1000,'IU'],['vitE',50,'IU'],['vitK',40,'mcg'],
+          ['vitB1',1.5,'mg'],['vitB2',1.7,'mg'],['niacin',20,'mg'],['vitB6',2,'mg'],['folate',400,'mcg'],
+          ['b12',6,'mcg'],['biotin',30,'mcg'],['vitB5',10,'mg'],['calcium',100,'mg'],['iron',18,'mg'],
+          ['iodine',150,'mcg'],['magnesium',40,'mg'],['zinc',15,'mg'],['selenium',20,'mcg'],
+          ['copper',2,'mg'],['manganese',4,'mg'],['chromium',120,'mcg'],['molybdenum',45,'mcg']] },
+
+  { id:'oadmen', th:'One A Day Men’s Health Formula', en:'One A Day Men’s Health Formula',
+    brand:'Bayer One A Day', unit:'เม็ด', src:'dsld', region:'intl',
+    comp:[['vitA',3500,'IU'],['vitC',60,'mg'],['vitD',700,'IU'],['vitE',22.5,'IU'],['vitK',20,'mcg'],
+          ['vitB1',1.35,'mg'],['vitB2',1.7,'mg'],['niacin',18,'mg'],['vitB6',3,'mg'],['folate',400,'mcg'],
+          ['b12',18,'mcg'],['biotin',75,'mcg'],['vitB5',16,'mg'],['calcium',210,'mg'],
+          ['magnesium',140,'mg'],['zinc',15,'mg'],['selenium',110,'mcg'],['copper',2,'mg'],
+          ['manganese',2,'mg'],['chromium',120,'mcg'],['lycopene',300,'mcg']] },
+
+  { id:'oadwomen', th:'One A Day Women’s Formula', en:'One A Day Women’s Formula',
+    brand:'Bayer One A Day', unit:'เม็ด', src:'dsld', region:'intl',
+    comp:[['vitA',2500,'IU'],['vitC',60,'mg'],['vitD',1000,'IU'],['vitE',22.5,'IU'],['vitK',25,'mcg'],
+          ['vitB1',1.5,'mg'],['vitB2',1.7,'mg'],['niacin',10,'mg'],['vitB6',2,'mg'],['folate',400,'mcg'],
+          ['b12',6,'mcg'],['biotin',30,'mcg'],['vitB5',5,'mg'],['calcium',500,'mg'],['iron',18,'mg'],
+          ['magnesium',50,'mg'],['zinc',15,'mg'],['selenium',20,'mcg'],['copper',2,'mg'],
+          ['manganese',2,'mg'],['chromium',120,'mcg']] },
+
+  { id:'oadprenatal', th:'One A Day Prenatal (เม็ด + ซอฟท์เจล)', en:'One A Day Prenatal (tablet + liquid gel)',
+    brand:'Bayer One A Day', unit:'เม็ด', src:'dsld', region:'intl',
+    note:'ฉลากนับ 1 หน่วยบริโภคเป็นเม็ดหนึ่งเม็ดคู่กับซอฟท์เจลหนึ่งเม็ด ปริมาณด้านล่างคือของทั้งชุด',
+    noteEn:'The label counts one serving as one tablet plus one liquid gel. The amounts below are for the pair.',
+    comp:[['vitA',4000,'IU'],['vitC',60,'mg'],['vitD',400,'IU'],['vitE',30,'IU'],
+          ['vitB1',1.7,'mg'],['vitB2',2,'mg'],['niacin',20,'mg'],['vitB6',2.5,'mg'],['folate',800,'mcg'],
+          ['b12',8,'mcg'],['biotin',300,'mcg'],['vitB5',10,'mg'],['calcium',300,'mg'],['iron',28,'mg'],
+          ['iodine',150,'mcg'],['magnesium',50,'mg'],['zinc',15,'mg'],['copper',2,'mg']] }
+];
+function mvAll(){
+  const mine = ((DB && DB.customMulti) || []).map(x => Object.assign({}, x, {custom:true, src:'mine'}));
+  return MULTIVIT.concat(mine);
+}
+function mvLabel(x){ return LANG === 'en' ? (x.en || x.th) : x.th; }
+function mvSrcText(k){
+  if(k === 'mine') return Lx('สูตรที่คุณบันทึกไว้เอง','A formula you saved yourself');
+  const S = MV_SRC[k];
+  return S ? Lx(S.th, S.en) : '';
+}
+
 /* ---------------- ความสัมพันธ์กับมื้ออาหารตามเอกสารกำกับยา ----------------
    ที่มาของแต่ละข้อมาจากเอกสารกำกับยาที่หน่วยงานกำกับดูแลอนุมัติเท่านั้น
    ระบบจะเลือกให้อัตโนมัติเฉพาะรายการที่เอกสารกำกับยาระบุไว้ชัดเจน
@@ -1134,7 +1310,14 @@ const TAGS = {
   contraceptive:{th:'ยาคุมกำเนิด', en:'Oral contraceptives', kw:['ยาคุม','contracept','ethinyl','yaz','diane','marvelon']},
   metformin:    {th:'เมทฟอร์มิน', en:'Metformin', kw:['metformin','glucophage','เมทฟอร์มิน','ยาเบาหวาน']},
   sedative:     {th:'ยานอนหลับ / ยาคลายกังวล', en:'Sedatives', kw:['diazepam','lorazepam','alprazolam','zolpidem','ยานอนหลับ','ยาคลายเครียด','ยาคลายกังวล']},
-  isotretinoin: {th:'ไอโซเตรทติโนอิน', en:'Isotretinoin', kw:['isotretinoin','roaccutane','acnotin','ยารักษาสิว']}
+  isotretinoin: {th:'ไอโซเตรทติโนอิน', en:'Isotretinoin', kw:['isotretinoin','roaccutane','acnotin','ยารักษาสิว']},
+  vitB2:        {th:'วิตามินบี 2', en:'Vitamin B2 (riboflavin)', kw:['บี2','b2','riboflavin','ไรโบฟลาวิน']},
+  vitB5:        {th:'วิตามินบี 5', en:'Vitamin B5 (pantothenic acid)', kw:['บี5','b5','pantothenic','แพนโทธีนิก','แพนโททีนิก','pantothenate']},
+  chromium:     {th:'โครเมียม', en:'Chromium', kw:['โครเมียม','chromium']},
+  molybdenum:   {th:'โมลิบดีนัม', en:'Molybdenum', kw:['โมลิบดีนัม','molybdenum']},
+  phosphorus:   {th:'ฟอสฟอรัส', en:'Phosphorus', kw:['ฟอสฟอรัส','phosphorus']},
+  choline:      {th:'โคลีน', en:'Choline', kw:['โคลีน','choline']},
+  lutein:       {th:'ลูทีน', en:'Lutein', kw:['ลูทีน','lutein']},
 };
 
 /* ---------------- คู่ที่ต้องระวัง ----------------
@@ -1209,7 +1392,10 @@ const LIMITS = {
   paracetamol: {max:4000, base:'mg',  th:'พาราเซตามอล', s:'U.S. FDA — Acetaminophen Information (ผู้ใหญ่)'},
   nsaid:       {max:1200, base:'mg',  th:'ไอบูโพรเฟนแบบซื้อเอง', s:'U.S. FDA — OTC ibuprofen labeling'},
   fishoil:     {max:3000, base:'mg',  th:'EPA รวม DHA', s:'U.S. FDA — GRAS notice for omega-3'},
-  potassium:   {max:99,   base:'mg',  th:'โพแทสเซียมจากอาหารเสริมชนิดซื้อเอง', s:'U.S. FDA — Potassium supplement labeling'}
+  potassium:   {max:99,   base:'mg',  th:'โพแทสเซียมจากอาหารเสริมชนิดซื้อเอง', s:'U.S. FDA — Potassium supplement labeling'},
+  molybdenum:  {max:2000, base:'mcg', th:'โมลิบดีนัม', s:'NIH ODS — Tolerable Upper Intake Level'},
+  phosphorus:  {max:4000, base:'mg',  th:'ฟอสฟอรัส', s:'NIH ODS — Tolerable Upper Intake Level (อายุเกิน 70 ปีลดเหลือ 3,000 มก.)'},
+  choline:     {max:3500, base:'mg',  th:'โคลีน', s:'NIH ODS — Tolerable Upper Intake Level'}
 };
 
 function ageOf(){
@@ -1240,18 +1426,33 @@ function convUnit(v, from, to, tag){
 /* รวมปริมาณที่ได้รับต่อวันของแต่ละสาร */
 function dailyIntake(dstr){
   const map = {};
+  const put = (tag, val, name) => {
+    (map[tag] = map[tag] || {tag:tag, total:0, items:[]});
+    map[tag].total += val;
+    map[tag].items.push({name:name, amount:val});
+  };
   P.meds.forEach(m => {
     if(!isDue(m, dstr)) return;
+    const units = (+m.perDose || 1) * (m.times || []).length;
+    /* รายการที่กรอกส่วนประกอบไว้ ให้คิดทีละสาร ไม่ใช้ช่องปริมาณตัวยารวม */
+    if(hasComp(m)){
+      m.comp.forEach(c => {
+        const N = NUTRIENTS[c.k]; if(!N || !N.tag) return;
+        const L = limitFor(N.tag); if(!L) return;
+        const val = convUnit(units * (+c.amt || 0), c.u, L.base, N.tag);
+        if(val === null || !val) return;
+        put(N.tag, val, m.name);
+      });
+      return;
+    }
     const st = +m.strength;
     if(!st || !m.strengthUnit) return;
-    const per = (+m.perDose || 1) * st * (m.times || []).length;
+    const per = units * st;
     medTags(m).forEach(tag => {
       const L = limitFor(tag); if(!L) return;
       const val = convUnit(per, m.strengthUnit, L.base, tag);
       if(val === null) return;
-      (map[tag] = map[tag] || {tag:tag, total:0, items:[]});
-      map[tag].total += val;
-      map[tag].items.push({name:m.name, amount:val});
+      put(tag, val, m.name);
     });
   });
   return Object.values(map).map(x => {
@@ -1306,7 +1507,10 @@ const UL_AGE = {
   selenium: [[3,90],[8,150],[13,280],[999,400]],
   copper:   [[3,1],[8,3],[13,5],[18,8],[999,10]],
   iodine:   [[3,200],[8,300],[13,600],[18,900],[999,1100]],
-  manganese:[[3,2],[8,3],[13,6],[18,9],[999,11]]
+  manganese:[[3,2],[8,3],[13,6],[18,9],[999,11]],
+  molybdenum:[[3,300],[8,600],[13,1100],[18,1700],[999,2000]],
+  phosphorus:[[8,3000],[70,4000],[999,3000]],
+  choline:  [[8,1000],[13,2000],[18,3000],[999,3500]]
 };
 
 /* ปริมาณอ้างอิงบนฉลากโภชนาการไทย (Thai RDI) สำหรับผู้ที่อายุ 6 ปีขึ้นไป
@@ -1316,7 +1520,9 @@ const THAI_RDI = {
   vitB1:{v:1.5,u:'mg'}, vitB6:{v:2,u:'mg'}, b12:{v:2,u:'mcg'}, niacin:{v:20,u:'mg'},
   folate:{v:200,u:'mcg'}, biotin:{v:150,u:'mcg'}, calcium:{v:800,u:'mg'}, iron:{v:15,u:'mg'},
   zinc:{v:15,u:'mg'}, iodine:{v:150,u:'mcg'}, magnesium:{v:350,u:'mg'}, selenium:{v:70,u:'mcg'},
-  copper:{v:2,u:'mg'}, manganese:{v:3.5,u:'mg'}, potassium:{v:3500,u:'mg'}
+  copper:{v:2,u:'mg'}, manganese:{v:3.5,u:'mg'}, potassium:{v:3500,u:'mg'},
+  vitK:{v:80,u:'mcg'}, vitB2:{v:1.7,u:'mg'}, vitB5:{v:6,u:'mg'},
+  phosphorus:{v:800,u:'mg'}, chromium:{v:130,u:'mcg'}, molybdenum:{v:160,u:'mcg'}
 };
 const THAI_RDI_SRC = {
   th:'ประกาศกระทรวงสาธารณสุขว่าด้วยฉลากโภชนาการ — ปริมาณสารอาหารที่แนะนำให้บริโภคต่อวันสำหรับคนไทยอายุ 6 ปีขึ้นไป (Thai RDI)',
@@ -4322,6 +4528,11 @@ function medTags(m){
   const set = new Set(m.tags || []);
   const hay = ((m.name||'') + ' ' + (m.nameEn||'')).toLowerCase();
   for(const k in TAGS) if(TAGS[k].kw.some(w => kwHit(hay, w))) set.add(k);
+  /* ส่วนประกอบที่ผู้ใช้กรอกไว้นับเป็นสารออกฤทธิ์ด้วย วิตามินรวมจึงเข้าการตรวจคู่ยาได้ */
+  if(hasComp(m)) m.comp.forEach(c => {
+    const N = NUTRIENTS[c.k];
+    if(N && N.tag && (+c.amt || 0) > 0) set.add(N.tag);
+  });
   (m.tagsOff || []).forEach(k => set.delete(k));
   return Array.from(set);
 }
@@ -4614,6 +4825,7 @@ function renderMeds(){
       '<span class="bd"><span class="nm">' + esc(m.name) + (m.dose ? ' <span style="font-weight:400;color:var(--ink-3);font-size:13px">' + esc(m.dose) + '</span>' : '') + '</span>'+
       '<span class="tt"><em>' + (m.times||[]).join(' · ') + '</em> · ' + freqText(m) +
       (ms ? ' · ' + ms : '') +
+      (hasComp(m) ? ' · ' + esc(Lx('รวม ' + m.comp.length + ' สาร', m.comp.length + ' nutrients')) : '') +
       (m.stockOn && m.stock !== null && m.stock !== undefined ? ' · เหลือ ' + m.stock + ' ' + esc(m.unit || 'เม็ด') : '') +
       (m.active ? '' : ' · พักไว้') + '</span>'+
       (tg.length ? '<span class="chips">' + sortTags(tg).slice(0,3).map(t => '<span class="chip">' + esc(TAGS[t].th) + '</span>').join('') + '</span>' : '') +
@@ -4636,6 +4848,7 @@ function medEditor(med){
     unit:'เม็ด', perDose:1, strength:null, strengthUnit:'mg',
     times:[], freq:{mode:'daily', days:[0,1,2,3,4,5,6], mdays:[1], every:2},
     meal:'none', mealGap:0, mealPicked:false, mealAuto:null, lead:null, tags:[], tagsOff:[], avoid:[],
+    multi:false, comp:[],
     start:todayStr(), end:'', active:true,
     stockOn:false, stock:30, perDoseCount:1, stockAlert:7, gen:null
   };
@@ -4646,6 +4859,8 @@ function medEditor(med){
     if(draft.mealPicked === undefined) draft.mealPicked = !!(draft.meal && draft.meal !== 'none');
     if(draft.mealGap === undefined) draft.mealGap = 0;
     if(!mealHasGap(draft.meal)) draft.mealGap = 0;
+    draft.comp = draft.comp || [];
+    if(draft.multi === undefined) draft.multi = draft.comp.length > 0;
   }
   openEditorSheet();
 }
@@ -4719,6 +4934,254 @@ function applyTypeDefaults(d, prev){
     d.unit = 'เม็ด'; d.strength = null; d.strengthUnit = 'mg'; d.icon = '💊';
   }
 }
+/* ---------------- ส่วนประกอบของวิตามินรวม ----------------
+   คำนวณปริมาณต่อวันของแต่ละสาร แล้วเทียบกับ Thai RDI และเพดานสูงสุด
+   ตัวเลขนี้เป็นค่าอ้างอิง ไม่ใช่คำสั่งใช้ยา */
+function compRows(d){
+  const units = (+d.perDose || 1) * ((d.times || []).length || 0);
+  const out = [];
+  (d.comp || []).forEach(c => {
+    const N = NUTRIENTS[c.k]; if(!N) return;
+    const day = (+c.amt || 0) * units;
+    let rdi = null, ul = null, ulMax = null, ulU = null;
+    if(N.tag && day){
+      const R = THAI_RDI[N.tag];
+      if(R){ const v = convUnit(day, c.u, R.u, N.tag); if(v !== null) rdi = Math.round(v / R.v * 100); }
+      const L = limitFor(N.tag);
+      if(L){ const v = convUnit(day, c.u, L.base, N.tag); if(v !== null){ ul = Math.round(v / L.max * 100); ulMax = L.max; ulU = L.base; } }
+    }
+    out.push({k:c.k, amt:+c.amt || 0, u:c.u, day:day, units:units, rdi:rdi, ul:ul, ulMax:ulMax, ulU:ulU});
+  });
+  return out;
+}
+function compSummary(d){
+  if(!hasComp(d)) return '';
+  const units = (+d.perDose || 1) * ((d.times || []).length || 0);
+  if(!units) return '<p class="h" style="margin:10px 0 0">' +
+    esc(Lx('ใส่เวลาที่ต้องกินก่อน ระบบจะรวมปริมาณต่อวันของแต่ละสารให้',
+           'Add the times first and the app will total each nutrient per day.')) + '</p>';
+  const rows = compRows(d).filter(r => r.day > 0);
+  if(!rows.length) return '';
+  const over = rows.filter(r => r.ul !== null && r.ul >= 100);
+  const near = rows.filter(r => r.ul !== null && r.ul >= 80 && r.ul < 100);
+  return '<div style="margin-top:12px">'+
+    '<label class="fl">' + esc(Lx('ได้รับต่อวันจากรายการนี้','Per day from this item')) + '</label>'+
+    '<div style="font-size:12.5px;line-height:1.7;color:var(--ink-2)">' +
+    rows.map(r => {
+      const cls = r.ul !== null && r.ul >= 100 ? 'color:var(--danger);font-weight:600'
+                : r.ul !== null && r.ul >= 80 ? 'color:var(--warn);font-weight:600' : '';
+      return '<div style="display:flex;justify-content:space-between;gap:10px;' + cls + '">'+
+        '<span>' + esc(nutLabel(r.k)) + '</span>'+
+        '<span class="num">' + esc(fmtAmt(r.day, r.u)) +
+          (r.rdi !== null ? ' · ' + r.rdi + '% Thai RDI' : '') +
+          (r.ul !== null ? ' · ' + esc(Lx('เพดาน ','limit ')) + r.ul + '%' : '') + '</span></div>';
+    }).join('') + '</div>'+
+    (over.length ? '<div class="link" style="margin:10px 0 0"><b>' +
+      esc(Lx('เกินเพดานสูงสุดต่อวัน','Over the daily upper limit')) + '</b><br>' +
+      esc(over.map(r => nutLabel(r.k) + ' ' + fmtAmt(r.day, r.u) + ' (' + Lx('เพดาน ','limit ') + fmtAmt(r.ulMax, r.ulU) + ')').join(' · ')) +
+      '<br>' + esc(Lx('ลดจำนวนที่กินต่อวันลง หรือปรึกษาเภสัชกรก่อนใช้ต่อ',
+                      'Take fewer per day, or ask a pharmacist before continuing.')) + '</div>' : '')+
+    (!over.length && near.length ? '<div class="link mod" style="margin:10px 0 0"><b>' +
+      esc(Lx('ใกล้เพดานสูงสุดต่อวัน','Close to the daily upper limit')) + '</b><br>' +
+      esc(near.map(r => nutLabel(r.k) + ' ' + r.ul + '%').join(' · ')) +
+      '<br>' + esc(Lx('ถ้ากินอาหารเสริมตัวอื่นที่มีสารเดียวกันด้วย ให้รวมยอดทั้งหมดก่อน',
+                      'If you take other supplements with the same nutrient, add them all up first.')) + '</div>' : '')+
+    '<p class="h" style="margin:10px 0 0">' +
+      esc(Lx('ยอดนี้คิดจากรายการนี้รายการเดียว หน้าวันนี้จะรวมทุกรายการให้อีกที และเป็นค่าอ้างอิง ไม่ใช่คำสั่งใช้ยา',
+             'This counts this item only. The Today page adds up everything together. These are reference values, not a prescription.')) + '</p>'+
+    '</div>';
+}
+function compCard(d){
+  const unit = d.unit || 'เม็ด';
+  const list = (d.comp || []);
+  return '<div class="card" style="box-shadow:none">'+
+    '<div class="row"><div class="g"><b>' + esc(Lx('หลายสารใน 1 ' + unit, 'Several nutrients in one ' + unitTx(unit))) + '</b>'+
+      '<span>' + esc(Lx('สำหรับวิตามินรวมหรืออาหารเสริมที่มีหลายอย่างในเม็ดเดียว',
+                        'For a multivitamin or any supplement with several nutrients in one unit')) + '</span></div>'+
+      '<button class="sw' + (d.multi ? ' on' : '') + '" id="fMultiOn"></button></div>'+
+    (d.multi ? '<div id="fCompBody" style="margin-top:12px">' + compBody(d) + '</div>' : '')+
+    '</div>';
+}
+function compBody(d){
+  const list = (d.comp || []);
+  return '<div class="two" style="margin-bottom:12px">'+
+      '<button class="btn ghost sm" id="fCompLib">' + esc(Lx('เลือกจากสูตรที่มีขาย','Pick a product formula')) + '</button>'+
+      '<button class="btn ghost sm" id="fCompAdd">' + esc(Lx('+ เพิ่มสารอาหาร','+ Add a nutrient')) + '</button></div>'+
+    (list.length
+      ? '<div id="fCompList">' + list.map((c,i) => {
+          const N = NUTRIENTS[c.k];
+          const rdi = N && N.tag && THAI_RDI[N.tag] ? THAI_RDI[N.tag] : null;
+          return '<div class="crow">'+
+            '<div class="cnm"><b>' + esc(nutLabel(c.k)) + '</b>'+
+            (rdi ? '<span>Thai RDI ' + esc(fmtAmt(rdi.v, rdi.u)) + esc(Lx(' ต่อวัน',' a day')) + '</span>' : '')+
+            '</div>'+
+            '<div class="cin">'+
+              '<input type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="' + (c.amt ? c.amt : '') + '" data-camt="' + i + '">'+
+              '<select data-cu="' + i + '">' +
+                STRENGTH_UNITS.map(x => '<option value="' + x.u + '"' + (x.u === c.u ? ' selected' : '') + '>' + x.th + '</option>').join('') +
+              '</select>'+
+              '<button class="btn sm ghost" data-crm="' + i + '" title="' + esc(Lx('เอาออก','Remove')) + '">×</button>'+
+            '</div></div>';
+        }).join('') + '</div>'+
+        '<div class="two" style="margin-top:12px">'+
+          '<button class="btn ghost sm" id="fCompSave">' + esc(Lx('บันทึกเป็นสูตรของฉัน','Save as my formula')) + '</button>'+
+          '<button class="btn ghost sm" id="fCompClear" style="color:var(--danger)">' + esc(Lx('ล้างทั้งหมด','Clear all')) + '</button></div>'
+      : '<p class="h" style="margin:0">' + esc(Lx('ยังไม่ได้ใส่ส่วนประกอบ เลือกจากสูตรที่มีขายเพื่อให้ระบบเติมให้ทั้งชุด หรือกดเพิ่มสารอาหารทีละอย่าง',
+            'No nutrients yet. Pick a product formula to fill the whole set, or add them one at a time.')) + '</p>')+
+    '<div id="fCompSum">' + compSummary(d) + '</div>';
+}
+/* อัปเดตเฉพาะยอดรวม ไม่แตะช่องกรอกที่ผู้ใช้กำลังใช้อยู่ */
+function refreshCompSum(){
+  const el = $('#fCompSum');
+  if(el) el.innerHTML = compSummary(draft);
+}
+/* วาดใหม่เฉพาะกล่องส่วนประกอบ ไม่แตะฟอร์มส่วนอื่น */
+function refreshComp(){
+  const box = $('#fCompBody');
+  if(!box){ drawEditor(); return; }
+  box.innerHTML = compBody(draft);
+  bindComp();
+}
+function bindComp(){
+  const d = draft;
+  const lib = $('#fCompLib');
+  if(lib) lib.onclick = () => { if(window.__sync) window.__sync(); multiPicker(openEditorSheet); };
+  const add = $('#fCompAdd');
+  if(add) add.onclick = () => { if(window.__sync) window.__sync(); nutrientPicker(openEditorSheet); };
+  $$('#fCompBody [data-camt]').forEach(inp => inp.oninput = () => {
+    const i = +inp.dataset.camt;
+    if(d.comp[i]) d.comp[i].amt = inp.value === '' ? 0 : Math.max(0, +inp.value || 0);
+    refreshCompSum();
+  });
+  $$('#fCompBody [data-cu]').forEach(sel => sel.onchange = () => {
+    const i = +sel.dataset.cu;
+    if(d.comp[i]) d.comp[i].u = sel.value;
+    refreshCompSum();
+  });
+  $$('#fCompBody [data-crm]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.crm;
+    d.comp.splice(i, 1);
+    setTimeout(refreshComp, 0);
+  });
+  const sv = $('#fCompSave');
+  if(sv) sv.onclick = () => { if(window.__sync) window.__sync(); saveMyFormula(d); };
+  const cl = $('#fCompClear');
+  if(cl) cl.onclick = () => {
+    if(confirm(Lx('ล้างส่วนประกอบทั้งหมดของรายการนี้?','Clear every nutrient on this item?'))){ d.comp = []; refreshComp(); }
+  };
+}
+function saveMyFormula(d){
+  const name = String(d.name || '').trim();
+  if(!name){ toast(Lx('ใส่ชื่อรายการก่อน','Enter a name first')); return; }
+  if(!hasComp(d)){ toast(Lx('ยังไม่มีส่วนประกอบให้บันทึก','There are no nutrients to save yet')); return; }
+  DB.customMulti = DB.customMulti || [];
+  const row = { id:'my-' + uid(), th:name, en:String(d.nameEn || '').trim() || name, brand:'',
+                unit:d.unit || 'เม็ด', region:'mine',
+                comp:d.comp.filter(c => (+c.amt || 0) > 0).map(c => [c.k, +c.amt, c.u]), at:todayStr() };
+  if(!row.comp.length){ toast(Lx('ยังไม่มีส่วนประกอบให้บันทึก','There are no nutrients to save yet')); return; }
+  const old = DB.customMulti.findIndex(x => x.th === row.th);
+  old >= 0 ? DB.customMulti[old] = row : DB.customMulti.push(row);
+  save();
+  toast(old >= 0 ? Lx('อัปเดตสูตรของฉันแล้ว','Updated your saved formula')
+                 : Lx('บันทึกเป็นสูตรของฉันแล้ว','Saved as your formula'));
+}
+/* แผ่นเลือกสารอาหารทีละอย่าง */
+let nutQ = '';
+function nutrientPicker(back){
+  nutQ = '';
+  const draw = () => {
+    const d = draft, have = new Set((d.comp || []).map(c => c.k));
+    const q = nutQ.trim().toLowerCase();
+    const body = NUT_GROUPS.map(G => {
+      const keys = Object.keys(NUTRIENTS).filter(k => NUTRIENTS[k].g === G.g && !have.has(k) &&
+        (!q || NUTRIENTS[k].th.toLowerCase().includes(q) || NUTRIENTS[k].en.toLowerCase().includes(q) || k.toLowerCase().includes(q)));
+      if(!keys.length) return '';
+      return '<label class="fl">' + esc(Lx(G.th, G.en)) + '</label>'+
+        '<div class="tagpick" style="margin-bottom:14px">' + keys.map(k =>
+          '<button data-n="' + k + '">' + esc(nutLabel(k)) + '</button>').join('') + '</div>';
+    }).join('');
+    $('#nutBody').innerHTML = body || '<div class="empty"><p>' +
+      esc(Lx('เพิ่มครบทุกอย่างในรายการนี้แล้ว','Everything on this list has been added already')) + '</p></div>';
+    $$('#nutBody [data-n]').forEach(b => b.onclick = () => {
+      const k = b.dataset.n, N = NUTRIENTS[k];
+      draft.comp = draft.comp || [];
+      draft.comp.push({k:k, amt:0, u:N.u});
+      draft.multi = true;
+      toast(Lx('เพิ่ม' + N.th + 'แล้ว ใส่ปริมาณต่อ 1 หน่วยได้เลย',
+               'Added ' + N.en + ' — now type the amount in one unit'));
+      draw();
+    });
+  };
+  openSheet('<div class="shd"><b>' + esc(Lx('เพิ่มสารอาหาร','Add a nutrient')) + '</b>'+
+    '<button class="btn sm ghost" onclick="dismissSheet()">' + esc(Lx('เสร็จแล้ว','Done')) + '</button></div>'+
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:-8px 0 12px;line-height:1.55">' +
+    esc(Lx('เลือกสารที่อยู่บนฉลากขวดของคุณ แล้วกรอกปริมาณต่อ 1 เม็ดหรือ 1 แคปซูลตามที่ฉลากเขียนไว้',
+           'Pick what is printed on your bottle, then type the amount in one tablet or capsule exactly as the label says.')) + '</p>'+
+    '<input id="nutQ" placeholder="' + esc(Lx('ค้นหาชื่อสารอาหาร','Search a nutrient')) + '" autocomplete="off" style="margin-bottom:12px">'+
+    '<div id="nutBody"></div>', back);
+  const qi = $('#nutQ');
+  qi.oninput = () => { nutQ = qi.value; const pos = qi.selectionStart; draw(); const n = $('#nutQ'); n.focus(); n.setSelectionRange(pos, pos); };
+  draw();
+}
+/* แผ่นเลือกสูตรวิตามินรวมที่มีขาย */
+let mvRegion = 'th';
+function multiPicker(back){
+  const draw = () => {
+    const rows = mvAll().filter(x => (x.region || 'intl') === mvRegion);
+    $('#mvBody').innerHTML =
+      '<div class="seg" style="margin-bottom:12px" id="mvReg">'+
+        '<button data-r="th"' + (mvRegion==='th'?' class="on"':'') + '>' + esc(Lx('ในไทย','Thailand')) + '</button>'+
+        '<button data-r="intl"' + (mvRegion==='intl'?' class="on"':'') + '>' + esc(Lx('ต่างประเทศ','International')) + '</button>'+
+        '<button data-r="mine"' + (mvRegion==='mine'?' class="on"':'') + '>' + esc(Lx('ของฉัน','Mine')) + '</button></div>'+
+      (rows.length ? rows.map((x,i) =>
+        '<div class="mrow" style="align-items:center">'+
+          '<button data-mv="' + i + '" style="display:flex;gap:11px;align-items:center;flex:1;min-width:0;text-align:left;background:none">'+
+            '<span class="pill">💊</span>'+
+            '<span class="bd"><span class="nm">' + esc(mvLabel(x)) + '</span>'+
+            '<span class="tt">' + (x.brand ? esc(x.brand) + ' · ' : '') +
+              esc(Lx('สารอาหาร ' + x.comp.length + ' ชนิด', x.comp.length + ' nutrients')) +
+              ' · ' + esc(Lx('ต่อ 1 ' + (x.unit || 'เม็ด'), 'per ' + unitTx(x.unit))) + '</span></span></button>'+
+          (x.custom ? '<button class="btn sm ghost" data-mvrm="' + i + '" style="flex:none;color:var(--danger)">×</button>' : '')+
+        '</div>').join('')
+        : '<div class="empty"><p>' + esc(mvRegion === 'mine'
+            ? Lx('ยังไม่มีสูตรที่คุณบันทึกไว้ กรอกส่วนประกอบในหน้าแก้ไขแล้วกดบันทึกเป็นสูตรของฉัน',
+                 'No saved formulas yet. Fill in the nutrients in the editor, then tap save as my formula.')
+            : Lx('ไม่มีรายการในกลุ่มนี้','Nothing in this group')) + '</p></div>');
+    $$('#mvReg button').forEach(b => b.onclick = () => { mvRegion = b.dataset.r; draw(); });
+    $$('#mvBody [data-mv]').forEach(b => b.onclick = () => applyFormula(rows[+b.dataset.mv], back));
+    $$('#mvBody [data-mvrm]').forEach(b => b.onclick = () => {
+      const x = rows[+b.dataset.mvrm];
+      if(!confirm(Lx('ลบสูตร "' + x.th + '" ออกจากของฉัน?','Delete the formula “' + x.th + '” from yours?'))) return;
+      DB.customMulti = (DB.customMulti || []).filter(y => y.id !== x.id);
+      save(); draw();
+    });
+  };
+  openSheet('<div class="shd"><b>' + esc(Lx('สูตรวิตามินรวม','Multivitamin formulas')) + '</b>'+
+    '<button class="btn sm ghost" onclick="dismissSheet()">' + esc(Lx('ปิด','Close')) + '</button></div>'+
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:-8px 0 12px;line-height:1.55">' +
+    esc(Lx('สูตรเหล่านี้คัดลอกจากฉลากที่ผู้ผลิตเผยแพร่ ผู้ผลิตเปลี่ยนสูตรได้ตลอดเวลา เลือกแล้วให้ทานกับขวดที่ถืออยู่จริงและแก้ให้ตรงเสมอ',
+           'These formulas are copied from labels published by the makers. Makers change formulas, so after picking one, check it against the bottle in your hand and correct it.')) + '</p>'+
+    '<div id="mvBody"></div>', back);
+  draw();
+}
+function applyFormula(x, back){
+  if(!x) return;
+  const d = draft;
+  d.comp = x.comp.map(c => ({k:c[0], amt:c[1], u:c[2]}));
+  d.multi = true;
+  if(!String(d.name || '').trim()){ d.name = x.th; d.nameEn = x.en || x.th; }
+  if(x.unit) d.unit = x.unit;
+  d.strength = null;
+  if(d.type === 'water') d.type = 'supp';
+  if(!d.mealPicked) autoMeal(d);
+  closeSheet();
+  setTimeout(() => {
+    openEditorSheet();
+    toast(Lx('ใส่สูตร ' + x.th + ' ให้แล้ว ทานกับฉลากบนขวดของคุณและแก้ได้ทุกค่า',
+             'Filled in ' + (x.en || x.th) + ' — check it against your bottle and change anything.'));
+  }, 180);
+}
+
 /* คำอธิบายใต้ปุ่มความสัมพันธ์กับมื้ออาหาร บอกว่าระบบเลือกให้จากอะไรและอ้างอิงที่ไหน */
 function mealHint(d){
   const r = mealRuleFor(d);
@@ -4801,10 +5264,14 @@ function drawEditor(){
       : '<div class="two"><div class="fld"><label class="fl">กินครั้งละ</label>'+
         '<div class="numrow"><input id="fPerDose" type="number" min="0.25" step="0.25" value="' + (d.perDose||1) + '">'+
         '<select id="fUnit">' + FORM_UNITS.map(u => '<option' + (u===(d.unit||'เม็ด')?' selected':'') + '>' + u + '</option>').join('') + '</select></div></div>'+
-        '<div class="fld"><label class="fl">ปริมาณตัวยาต่อ 1 ' + esc(d.unit||'เม็ด') + '</label>'+
+        (d.multi ? '<div class="fld"><label class="fl">ปริมาณตัวยาต่อ 1 ' + esc(d.unit||'เม็ด') + '</label>'+
+          '<p class="h" style="margin:9px 0 0">' + esc(Lx('แยกเป็นรายสารอยู่ด้านล่าง','Listed nutrient by nutrient below')) + '</p></div>'
+        : '<div class="fld"><label class="fl">ปริมาณตัวยาต่อ 1 ' + esc(d.unit||'เม็ด') + '</label>'+
         '<div class="numrow"><input id="fStrength" type="number" min="0" step="any" placeholder="เช่น 500" value="' + (d.strength==null?'':d.strength) + '">'+
-        '<select id="fSUnit">' + STRENGTH_UNITS.map(x => '<option value="' + x.u + '"' + (x.u===(d.strengthUnit||'mg')?' selected':'') + '>' + x.th + '</option>').join('') + '</select></div></div></div>')+
+        '<select id="fSUnit">' + STRENGTH_UNITS.map(x => '<option value="' + x.u + '"' + (x.u===(d.strengthUnit||'mg')?' selected':'') + '>' + x.th + '</option>').join('') + '</select></div></div>')+
+        '</div>')+
     '<p style="font-size:12.5px;color:var(--ink-3);margin:-6px 0 14px;line-height:1.55" id="fDosePv"></p>'+
+    (isWater ? '' : compCard(d))+
 
     '<div class="fld"><label class="fl">ไอคอน</label><div class="tagpick" id="fIcon">'+
       ICONS.map(i => '<button data-i="' + i + '"' + (d.icon===i?' class="on"':'') + ' style="font-size:17px;padding:5px 9px">' + i + '</button>').join('') + '</div></div>'+
@@ -4893,7 +5360,8 @@ function drawEditor(){
       if(d.unit === 'มิลลิลิตร') d.strength = 1;
       if(!d.strength) d.strength = WATER_VOL[d.unit] || 250;
     }
-    d.dose = (d.perDose || 1) + ' ' + (d.unit || 'เม็ด') + (d.strength && d.type !== 'water' ? ' (' + fmtAmt((d.perDose||1) * d.strength, d.strengthUnit) + ')' : '');
+    d.dose = (d.perDose || 1) + ' ' + (d.unit || 'เม็ด') +
+      (d.multi ? '' : (d.strength && d.type !== 'water' ? ' (' + fmtAmt((d.perDose||1) * d.strength, d.strengthUnit) + ')' : ''));
     const pv = g('#fDosePv');
     if(pv){
       const per = (d.perDose||1), n = (d.times||[]).length;
@@ -4909,6 +5377,12 @@ function drawEditor(){
           esc(fmtAmt(day, 'mL')) + ' ต่อวัน' +
           (tgt ? '<br>ร่างกายคุณที่ ' + showMass(w) + ' ต้องการน้ำราว ' + esc(fmtAmt(tgt, 'mL')) +
             ' ต่อวัน ตอนนี้ตั้งไว้ ' + Math.round(day / tgt * 100) + '%' : '');
+      } else if(d.multi){
+        pv.textContent = hasComp(d)
+          ? Lx('มีส่วนประกอบ ' + d.comp.length + ' ชนิด · วันละ ' + n + ' ครั้ง ยอดรวมต่อวันอยู่ท้ายกล่องส่วนประกอบ',
+               d.comp.length + ' nutrients · ' + n + ' times a day — the daily totals are at the end of the nutrient box')
+          : Lx('เปิดโหมดหลายสารไว้แล้ว ใส่ส่วนประกอบในกล่องด้านล่าง',
+               'Multi-nutrient mode is on — add the nutrients in the box below');
       } else {
         pv.innerHTML = d.strength
           ? 'ครั้งละ ' + esc(fmtAmt(per * d.strength, d.strengthUnit)) + ' · วันละ ' + n + ' ครั้ง รวม ' +
@@ -5027,6 +5501,13 @@ function drawEditor(){
   $('#addTime').onclick = () => { sync(); askTime(t => { if(!d.times.includes(t)){ d.times.push(t); d.times.sort((a,b)=>toMin(a)-toMin(b)); } drawEditor(); }); };
   $('#fActive').onclick = () => { sync(); d.active = !d.active; drawEditor(); };
   const so = $('#fStockOn'); if(so) so.onclick = () => { sync(); d.stockOn = !d.stockOn; drawEditor(); };
+  const mo = $('#fMultiOn');
+  if(mo) mo.onclick = () => {
+    sync(); d.multi = !d.multi;
+    if(d.multi){ d.comp = d.comp || []; d.strength = null; }
+    drawEditor();
+  };
+  bindComp();
   $('#edBody').dataset.sync = '1';
   window.__sync = sync;
   sync();
@@ -5063,6 +5544,11 @@ function saveDraft(){
   if(d.end && d.start && d.end < d.start){ toast('วันสิ้นสุดต้องอยู่หลังวันเริ่ม'); return; }
   d.name = d.name.trim();
   d.tags = d.tags || []; d.tagsOff = d.tagsOff || [];
+  /* ทิ้งส่วนประกอบที่ยังไม่ได้กรอกปริมาณ แล้วให้ธงตรงกับสิ่งที่เหลือจริง */
+  d.comp = (d.comp || []).filter(c => NUTRIENTS[c.k] && (+c.amt || 0) > 0)
+                         .map(c => ({k:c.k, amt:+c.amt, u:c.u || NUTRIENTS[c.k].u}));
+  d.multi = d.comp.length > 0;
+  if(d.multi) d.strength = null;
   /* กันไว้อีกชั้น เผื่อชื่อถูกพิมพ์เองโดยไม่ได้เลือกจากคลัง ยาต้องไม่ถูกบันทึกเป็นอาหารเสริม */
   const lk = libKind(d), typeFixed = (lk && lk !== d.type) ? lk : null;
   if(typeFixed){ d.type = typeFixed; applyTypeDefaults(d, d.type); }
@@ -7092,7 +7578,7 @@ function boot(){
 loadData().then(boot).catch(dataError);
 
 /* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
-const APP_VERSION = '34';
+const APP_VERSION = '35';
 let swReg = null, updWaiting = null, updReloading = false;
 function showUpdateBar(w){
   updWaiting = w;
