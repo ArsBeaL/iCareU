@@ -315,15 +315,15 @@ html[data-dark="1"] .tagpick button.on{color:#0E1419}
 .shd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
 .shd b{font-size:18px;font-weight:670}
 .times{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
-.crow{padding:11px 0;border-bottom:1px solid var(--line)}
-.crow:last-child{border-bottom:0;padding-bottom:2px}
-.crow .cnm{display:flex;flex-direction:column;gap:2px;margin-bottom:7px}
-.crow .cnm b{font-size:13.5px;font-weight:620}
-.crow .cnm span{font-size:11.5px;color:var(--ink-3)}
-.crow .cin{display:flex;gap:8px;align-items:center}
-.crow .cin input{flex:1;min-width:0}
-.crow .cin select{width:118px;flex:none}
-.crow .cin button{flex:none;width:42px;padding:8px 0;font-size:16px}
+.crow{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+.crow .cnm{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left;background:none;padding:2px 0}
+.crow .cnm b{font-size:14px;font-weight:620}
+.crow .cnm span{font-size:12.5px;color:var(--ink-2)}
+.crow > .btn{flex:none;width:40px;padding:7px 0;font-size:16px}
+.crow.editing .cnm b{color:var(--accent)}
+.cform{margin-top:12px;padding:12px;border:1px dashed var(--line);border-radius:var(--r-sm);background:var(--paper)}
+.cform select,.cform input{width:100%;box-sizing:border-box}
+.cform .numrow select{width:auto;flex:none;min-width:120px}
 @keyframes missPulse{0%,100%{box-shadow:0 0 0 0 rgba(224,49,49,0)}35%{box-shadow:0 0 0 4px rgba(224,49,49,.28)}}
 .miss{animation:missPulse .8s ease 2;border-color:var(--danger)!important;color:var(--danger)!important}
 .tpill{display:inline-flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);
@@ -964,6 +964,40 @@ function unitTx(u){
   return (typeof LANG !== 'undefined' && LANG === 'en') ? ((typeof DICT !== 'undefined' && DICT[u]) || u) : u;
 }
 function hasComp(m){ return !!(m && m.comp && m.comp.length); }
+/* ข้อความขนาดที่กินต่อครั้ง สร้างใหม่ทุกครั้งตามภาษาที่เลือก ไม่อ่านจากข้อความที่เก็บไว้ตอนบันทึก */
+function doseText(m){
+  if(!m) return '';
+  const per = +m.perDose || 1, u = m.unit || 'เม็ด';
+  const unitShown = (typeof LANG !== 'undefined' && LANG === 'en') ? unitTx(u) : u;
+  let t = per + ' ' + unitShown;
+  if(m.type === 'water'){
+    if(m.strength) t += ' · ' + fmtAmt(per * m.strength, 'mL');
+  } else if(hasComp(m)){
+    t += ' · ' + Lx('สารประกอบ ' + m.comp.length + ' ชนิด', m.comp.length + ' ingredients');
+  } else if(m.strength){
+    t += ' · ' + fmtAmt(per * m.strength, m.strengthUnit);
+  }
+  return t;
+}
+/* ชื่อของส่วนประกอบ รองรับทั้งสารจากรายการและสารที่ผู้ใช้พิมพ์ชื่อเอง */
+function compName(c){
+  if(!c) return '';
+  if(c.k === 'custom') return c.name || Lx('ไม่ระบุชื่อ','Unnamed');
+  return nutLabel(c.k);
+}
+/* สารออกฤทธิ์ของส่วนประกอบหนึ่งตัว สารที่พิมพ์เองเดาจากชื่อด้วยตัวจับคำเดียวกับชื่อยา */
+function compTags(c){
+  if(!c) return [];
+  if(c.k === 'custom') return (c.tags && c.tags.length) ? c.tags : autoTags(c.name || '');
+  const N = NUTRIENTS[c.k];
+  return N && N.tag ? [N.tag] : [];
+}
+/* ถ้าชื่อที่พิมพ์ตรงกับสารในรายการ ให้ใช้คีย์ของรายการแทน จะได้มีเกณฑ์ให้เทียบ */
+function nutKeyFromName(name){
+  const q = String(name || '').trim().toLowerCase();
+  if(!q) return null;
+  return Object.keys(NUTRIENTS).find(k => NUTRIENTS[k].th.toLowerCase() === q || NUTRIENTS[k].en.toLowerCase() === q) || null;
+}
 /* ปริมาณของสารหนึ่งใน 1 หน่วย คืน null ถ้าไม่มี */
 function compAmt(m, k){
   if(!hasComp(m)) return null;
@@ -1437,11 +1471,12 @@ function dailyIntake(dstr){
     /* รายการที่กรอกส่วนประกอบไว้ ให้คิดทีละสาร ไม่ใช้ช่องปริมาณตัวยารวม */
     if(hasComp(m)){
       m.comp.forEach(c => {
-        const N = NUTRIENTS[c.k]; if(!N || !N.tag) return;
-        const L = limitFor(N.tag); if(!L) return;
-        const val = convUnit(units * (+c.amt || 0), c.u, L.base, N.tag);
-        if(val === null || !val) return;
-        put(N.tag, val, m.name);
+        compTags(c).forEach(tag => {
+          const L = limitFor(tag); if(!L) return;
+          const val = convUnit(units * (+c.amt || 0), c.u, L.base, tag);
+          if(val === null || !val) return;
+          put(tag, val, m.name);
+        });
       });
       return;
     }
@@ -1461,10 +1496,23 @@ function dailyIntake(dstr){
   });
 }
 const SU_EN = {mg:'mg', mcg:'mcg', g:'g', IU:'IU', mL:'mL', CFU:'billion CFU', mEq:'mEq'};
+/* แสดงหน่วยทั้งสองภาษา ภาษาที่เลือกอยู่ก่อน อีกภาษาในวงเล็บ เช่น มก. (mg) หรือ mg (มก.)
+   หน่วยที่เขียนเหมือนกันทั้งสองภาษา เช่น IU ไม่ต้องใส่วงเล็บซ้ำ */
+function suLabel(u){
+  const th = SU_TH[u] || u, en = SU_EN[u] || u;
+  if(th === en) return th;
+  return (typeof LANG !== 'undefined' && LANG === 'en') ? en + ' (' + th + ')' : th + ' (' + en + ')';
+}
+/* หน่วยรูปแบบยา เช่น เม็ด (tablet) ค่าที่เก็บยังเป็นคำไทยเหมือนเดิม */
+function fuLabel(u){
+  const en = (typeof UNIT_EN !== 'undefined' && UNIT_EN[u]) || '';
+  if(!en || en === u) return u;
+  return (typeof LANG !== 'undefined' && LANG === 'en') ? en + ' (' + u + ')' : u + ' (' + en + ')';
+}
 function fmtAmt(v, u){
   const n = v >= 100 ? Math.round(v) : Math.round(v*10)/10;
   const en = (typeof LANG !== 'undefined' && LANG === 'en');
-  return n.toLocaleString(en ? 'en-US' : 'th-TH') + ' ' + ((en ? SU_EN[u] : SU_TH[u]) || u);
+  return n.toLocaleString(en ? 'en-US' : 'th-TH') + ' ' + suLabel(u);
 }
 
 /* ---- รายการยาและอาหารเสริมแยกตามหมวด ----
@@ -4530,8 +4578,7 @@ function medTags(m){
   for(const k in TAGS) if(TAGS[k].kw.some(w => kwHit(hay, w))) set.add(k);
   /* ส่วนประกอบที่ผู้ใช้กรอกไว้นับเป็นสารออกฤทธิ์ด้วย วิตามินรวมจึงเข้าการตรวจคู่ยาได้ */
   if(hasComp(m)) m.comp.forEach(c => {
-    const N = NUTRIENTS[c.k];
-    if(N && N.tag && (+c.amt || 0) > 0) set.add(N.tag);
+    if((+c.amt || 0) > 0) compTags(c).forEach(t => set.add(t));
   });
   (m.tagsOff || []).forEach(k => set.delete(k));
   return Array.from(set);
@@ -4711,7 +4758,7 @@ function renderToday(){
       const m = d.med, ms = mealShort(m);
       const chips = [];
       if(ms) chips.push('<span class="chip meal">' + ms + '</span>');
-      if(m.dose) chips.push('<span class="chip">' + esc(m.dose) + '</span>');
+      if(doseText(m)) chips.push('<span class="chip">' + esc(doseText(m)) + '</span>');
       if(m.stockOn && m.stock !== null && m.stock <= (m.stockAlert || 7))
         chips.push('<span class="chip stock">เหลือ ' + m.stock + ' ' + esc(m.unit || 'เม็ด') + '</span>');
       const myConf = conf.filter(c => (c.a.id === m.id || c.b.id === m.id) && c.at === t);
@@ -4822,10 +4869,9 @@ function renderMeds(){
     return '<div class="mrow' + (m.active ? '' : ' off') + '" style="align-items:center">'+
       '<button data-m="' + m.id + '" style="display:flex;gap:11px;align-items:center;flex:1;min-width:0;text-align:left;background:none">'+
       '<span class="pill">' + (m.icon || '💊') + '</span>'+
-      '<span class="bd"><span class="nm">' + esc(m.name) + (m.dose ? ' <span style="font-weight:400;color:var(--ink-3);font-size:13px">' + esc(m.dose) + '</span>' : '') + '</span>'+
+      '<span class="bd"><span class="nm">' + esc(m.name) + ' <span style="font-weight:400;color:var(--ink-3);font-size:13px">' + esc(doseText(m)) + '</span>' + '</span>'+
       '<span class="tt"><em>' + (m.times||[]).join(' · ') + '</em> · ' + freqText(m) +
       (ms ? ' · ' + ms : '') +
-      (hasComp(m) ? ' · ' + esc(Lx('รวม ' + m.comp.length + ' สาร', m.comp.length + ' nutrients')) : '') +
       (m.stockOn && m.stock !== null && m.stock !== undefined ? ' · เหลือ ' + m.stock + ' ' + esc(m.unit || 'เม็ด') : '') +
       (m.active ? '' : ' · พักไว้') + '</span>'+
       (tg.length ? '<span class="chips">' + sortTags(tg).slice(0,3).map(t => '<span class="chip">' + esc(TAGS[t].th) + '</span>').join('') + '</span>' : '') +
@@ -4853,6 +4899,7 @@ function medEditor(med){
     stockOn:false, stock:30, perDoseCount:1, stockAlert:7, gen:null
   };
   draftIsNew = !med;
+  resetCompForm(false);
   /* รายการเก่าที่บันทึกไว้ก่อนมีระบบเลือกมื้ออาหารอัตโนมัติ ให้ถือว่าผู้ใช้เลือกเองแล้ว
      ระบบจะได้ไม่ไปทับค่าที่ผู้ใช้ตั้งไว้ */
   if(med){
@@ -4941,187 +4988,234 @@ function compRows(d){
   const units = (+d.perDose || 1) * ((d.times || []).length || 0);
   const out = [];
   (d.comp || []).forEach(c => {
-    const N = NUTRIENTS[c.k]; if(!N) return;
+    const tag = compTags(c)[0] || null;
     const day = (+c.amt || 0) * units;
     let rdi = null, ul = null, ulMax = null, ulU = null;
-    if(N.tag && day){
-      const R = THAI_RDI[N.tag];
-      if(R){ const v = convUnit(day, c.u, R.u, N.tag); if(v !== null) rdi = Math.round(v / R.v * 100); }
-      const L = limitFor(N.tag);
-      if(L){ const v = convUnit(day, c.u, L.base, N.tag); if(v !== null){ ul = Math.round(v / L.max * 100); ulMax = L.max; ulU = L.base; } }
+    if(tag && day){
+      const R = THAI_RDI[tag];
+      if(R){ const v = convUnit(day, c.u, R.u, tag); if(v !== null) rdi = Math.round(v / R.v * 100); }
+      const L = limitFor(tag);
+      if(L){ const v = convUnit(day, c.u, L.base, tag); if(v !== null){ ul = Math.round(v / L.max * 100); ulMax = L.max; ulU = L.base; } }
     }
-    out.push({k:c.k, amt:+c.amt || 0, u:c.u, day:day, units:units, rdi:rdi, ul:ul, ulMax:ulMax, ulU:ulU});
+    out.push({c:c, name:compName(c), amt:+c.amt || 0, u:c.u, day:day, rdi:rdi, ul:ul, ulMax:ulMax, ulU:ulU});
   });
   return out;
 }
+/* คู่ที่ตีกับรายการอื่นที่ใช้อยู่ ตรวจจากสารในเม็ดนี้ทุกตัว
+   ไม่ตรวจสารที่อยู่ในเม็ดเดียวกันเอง เพราะแยกกินไม่ได้อยู่แล้ว */
+function compClash(d){
+  const mine = medTags(d), out = [], seen = new Set();
+  P.meds.filter(m => m.id !== d.id && m.active).forEach(m => {
+    pairIssues(mine, medTags(m)).forEach(r => {
+      if(r.sev === 'good') return;
+      const key = m.id + '|' + r.t;
+      if(seen.has(key)) return; seen.add(key);
+      out.push({name:m.name, r:r});
+    });
+  });
+  return out.sort((a,b) => (a.r.sev === 'high' ? 0 : 1) - (b.r.sev === 'high' ? 0 : 1));
+}
 function compSummary(d){
   if(!hasComp(d)) return '';
+  let h = '';
   const units = (+d.perDose || 1) * ((d.times || []).length || 0);
-  if(!units) return '<p class="h" style="margin:10px 0 0">' +
-    esc(Lx('ใส่เวลาที่ต้องกินก่อน ระบบจะรวมปริมาณต่อวันของแต่ละสารให้',
-           'Add the times first and the app will total each nutrient per day.')) + '</p>';
-  const rows = compRows(d).filter(r => r.day > 0);
-  if(!rows.length) return '';
-  const over = rows.filter(r => r.ul !== null && r.ul >= 100);
-  const near = rows.filter(r => r.ul !== null && r.ul >= 80 && r.ul < 100);
-  return '<div style="margin-top:12px">'+
-    '<label class="fl">' + esc(Lx('ได้รับต่อวันจากรายการนี้','Per day from this item')) + '</label>'+
-    '<div style="font-size:12.5px;line-height:1.7;color:var(--ink-2)">' +
-    rows.map(r => {
-      const cls = r.ul !== null && r.ul >= 100 ? 'color:var(--danger);font-weight:600'
-                : r.ul !== null && r.ul >= 80 ? 'color:var(--warn);font-weight:600' : '';
-      return '<div style="display:flex;justify-content:space-between;gap:10px;' + cls + '">'+
-        '<span>' + esc(nutLabel(r.k)) + '</span>'+
-        '<span class="num">' + esc(fmtAmt(r.day, r.u)) +
-          (r.rdi !== null ? ' · ' + r.rdi + '% Thai RDI' : '') +
-          (r.ul !== null ? ' · ' + esc(Lx('เพดาน ','limit ')) + r.ul + '%' : '') + '</span></div>';
-    }).join('') + '</div>'+
-    (over.length ? '<div class="link" style="margin:10px 0 0"><b>' +
-      esc(Lx('เกินเพดานสูงสุดต่อวัน','Over the daily upper limit')) + '</b><br>' +
-      esc(over.map(r => nutLabel(r.k) + ' ' + fmtAmt(r.day, r.u) + ' (' + Lx('เพดาน ','limit ') + fmtAmt(r.ulMax, r.ulU) + ')').join(' · ')) +
-      '<br>' + esc(Lx('ลดจำนวนที่กินต่อวันลง หรือปรึกษาเภสัชกรก่อนใช้ต่อ',
-                      'Take fewer per day, or ask a pharmacist before continuing.')) + '</div>' : '')+
-    (!over.length && near.length ? '<div class="link mod" style="margin:10px 0 0"><b>' +
-      esc(Lx('ใกล้เพดานสูงสุดต่อวัน','Close to the daily upper limit')) + '</b><br>' +
-      esc(near.map(r => nutLabel(r.k) + ' ' + r.ul + '%').join(' · ')) +
-      '<br>' + esc(Lx('ถ้ากินอาหารเสริมตัวอื่นที่มีสารเดียวกันด้วย ให้รวมยอดทั้งหมดก่อน',
-                      'If you take other supplements with the same nutrient, add them all up first.')) + '</div>' : '')+
-    '<p class="h" style="margin:10px 0 0">' +
-      esc(Lx('ยอดนี้คิดจากรายการนี้รายการเดียว หน้าวันนี้จะรวมทุกรายการให้อีกที และเป็นค่าอ้างอิง ไม่ใช่คำสั่งใช้ยา',
-             'This counts this item only. The Today page adds up everything together. These are reference values, not a prescription.')) + '</p>'+
-    '</div>';
+  if(!units){
+    h += '<p class="h" style="margin:12px 0 0">' +
+      esc(Lx('ใส่เวลาที่ต้องกินก่อน ระบบจะรวมปริมาณต่อวันของแต่ละสารให้',
+             'Add the times first and the app will total each nutrient per day.')) + '</p>';
+  } else {
+    const rows = compRows(d).filter(r => r.day > 0);
+    const over = rows.filter(r => r.ul !== null && r.ul >= 100);
+    const near = rows.filter(r => r.ul !== null && r.ul >= 80 && r.ul < 100);
+    h += '<div style="margin-top:14px"><label class="fl">' +
+      esc(Lx('ได้รับต่อวัน (' + ((+d.perDose||1)) + ' ' + (d.unit||'เม็ด') + ' × ' + (d.times.length) + ' ครั้ง)',
+             'Per day (' + (+d.perDose||1) + ' ' + unitTx(d.unit) + ' × ' + d.times.length + ')')) + '</label>'+
+      '<div style="font-size:12.5px;line-height:1.75;color:var(--ink-2)">' +
+      rows.map(r => {
+        const cls = r.ul !== null && r.ul >= 100 ? 'color:var(--danger);font-weight:600'
+                  : r.ul !== null && r.ul >= 80 ? 'color:var(--warn);font-weight:600' : '';
+        return '<div style="display:flex;justify-content:space-between;gap:10px;' + cls + '">'+
+          '<span>' + esc(r.name) + '</span>'+
+          '<span class="num" style="text-align:right">' + esc(fmtAmt(r.day, r.u)) +
+            (r.rdi !== null ? ' · ' + r.rdi + '% Thai RDI' : '') +
+            (r.ul !== null ? ' · ' + esc(Lx('เพดาน ','limit ')) + r.ul + '%' : '') + '</span></div>';
+      }).join('') + '</div></div>'+
+      (over.length ? '<div class="link" style="margin:10px 0 0"><b>' +
+        esc(Lx('เกินเพดานสูงสุดต่อวัน','Over the daily upper limit')) + '</b><br>' +
+        esc(over.map(r => r.name + ' ' + fmtAmt(r.day, r.u) + ' (' + Lx('เพดาน ','limit ') + fmtAmt(r.ulMax, r.ulU) + ')').join(' · ')) +
+        '<br>' + esc(Lx('ลดจำนวนที่กินต่อวันลง หรือปรึกษาเภสัชกรก่อนใช้ต่อ',
+                        'Take fewer per day, or ask a pharmacist before continuing.')) + '</div>' : '')+
+      (!over.length && near.length ? '<div class="link mod" style="margin:10px 0 0"><b>' +
+        esc(Lx('ใกล้เพดานสูงสุดต่อวัน','Close to the daily upper limit')) + '</b><br>' +
+        esc(near.map(r => r.name + ' ' + r.ul + '%').join(' · ')) +
+        '<br>' + esc(Lx('ถ้ากินอาหารเสริมตัวอื่นที่มีสารเดียวกันด้วย ให้รวมยอดทั้งหมดก่อน',
+                        'If you take other supplements with the same nutrient, add them all up first.')) + '</div>' : '');
+  }
+  const cl = compClash(d);
+  if(cl.length){
+    h += '<div style="margin-top:14px"><label class="fl">' + esc(Lx('ตีกับรายการที่ใช้อยู่','Clashes with what you already take')) + '</label>' +
+      cl.slice(0,6).map(x => '<div class="link' + (x.r.sev === 'high' ? '' : ' mod') + '" style="margin:0 0 8px">'+
+        '<b>' + esc(x.name) + '</b> — ' + esc(RT(x.r,'t')) + '<br>' + esc(RT(x.r,'x')) + '</div>').join('') +
+      (cl.length > 6 ? '<p class="h">' + esc(Lx('และอีก ' + (cl.length - 6) + ' คู่ ดูทั้งหมดได้ที่หน้าวันนี้',
+                                               'and ' + (cl.length - 6) + ' more — see them all on the Today page')) + '</p>' : '') +
+      '</div>';
+  }
+  h += '<p class="h" style="margin:10px 0 0">' +
+    esc(Lx('ยอดนี้คิดจากรายการนี้รายการเดียว หน้าวันนี้จะรวมทุกรายการให้อีกที และเป็นค่าอ้างอิง ไม่ใช่คำสั่งใช้ยา',
+           'This counts this item only. The Today page adds up everything together. These are reference values, not a prescription.')) + '</p>';
+  return h;
 }
+/* ฟอร์มเพิ่มสารประกอบทีละตัว ค่าที่ค้างอยู่เก็บไว้ที่นี่ เพื่อไม่ให้หายตอนกล่องถูกวาดใหม่ */
+let compForm = {k:'', name:'', amt:'', u:'mg', edit:-1, open:false};
+function resetCompForm(open){ compForm = {k:'', name:'', amt:'', u:'mg', edit:-1, open:!!open}; }
 function compCard(d){
   const unit = d.unit || 'เม็ด';
-  const list = (d.comp || []);
-  return '<div class="card" style="box-shadow:none">'+
-    '<div class="row"><div class="g"><b>' + esc(Lx('หลายสารใน 1 ' + unit, 'Several nutrients in one ' + unitTx(unit))) + '</b>'+
-      '<span>' + esc(Lx('สำหรับวิตามินรวมหรืออาหารเสริมที่มีหลายอย่างในเม็ดเดียว',
-                        'For a multivitamin or any supplement with several nutrients in one unit')) + '</span></div>'+
-      '<button class="sw' + (d.multi ? ' on' : '') + '" id="fMultiOn"></button></div>'+
-    (d.multi ? '<div id="fCompBody" style="margin-top:12px">' + compBody(d) + '</div>' : '')+
+  return '<div class="card" style="box-shadow:none" id="fCompCard">'+
+    '<h3>' + esc(Lx('สารประกอบใน 1 ' + unit, 'Ingredients in one ' + unitTx(unit))) + '</h3>'+
+    '<p class="h">' + esc(Lx('ถ้า 1 ' + unit + ' มีหลายสาร เช่น NAT MAG ที่มีแมกนีเซียม วิตามินบี 1 และบี 6 ให้เพิ่มทีละสารพร้อมปริมาณตามฉลาก ระบบจะรวมปริมาณต่อวันและตรวจการตีกันให้',
+      'If one ' + unitTx(unit) + ' holds several ingredients — say magnesium with vitamins B1 and B6 — add them one by one with the amount on the label. The app totals each per day and checks for clashes.')) + '</p>'+
+    '<div id="fCompBody">' + compBody(d) + '</div>'+
     '</div>';
 }
 function compBody(d){
-  const list = (d.comp || []);
-  return '<div class="two" style="margin-bottom:12px">'+
+  const list = d.comp || [];
+  const f = compForm;
+  const showForm = f.open || f.edit >= 0;
+  const used = new Set(list.filter((c,i) => i !== f.edit && c.k !== 'custom').map(c => c.k));
+  const opts = '<option value="">' + esc(Lx('— เลือกสารประกอบ —','— choose an ingredient —')) + '</option>' +
+    NUT_GROUPS.map(G => '<optgroup label="' + esc(Lx(G.th, G.en)) + '">' +
+      Object.keys(NUTRIENTS).filter(k => NUTRIENTS[k].g === G.g && !used.has(k)).map(k =>
+        '<option value="' + k + '"' + (f.k === k ? ' selected' : '') + '>' + esc(nutLabel(k)) + '</option>').join('') +
+      '</optgroup>').join('') +
+    '<option value="custom"' + (f.k === 'custom' ? ' selected' : '') + '>' + esc(Lx('อื่น ๆ พิมพ์ชื่อเอง','Other — type the name')) + '</option>';
+  return (list.length
+      ? '<div id="fCompList">' + list.map((c,i) =>
+          '<div class="crow' + (i === f.edit ? ' editing' : '') + '">'+
+            '<button class="cnm" data-cedit="' + i + '"><b>' + esc(compName(c)) + '</b>'+
+              '<span class="num">' + esc(fmtAmt(+c.amt || 0, c.u)) + ' ' + esc(Lx('ต่อ 1 ' + (d.unit||'เม็ด'), 'per ' + unitTx(d.unit))) + '</span></button>'+
+            '<button class="btn sm ghost" data-crm="' + i + '" title="' + esc(Lx('เอาออก','Remove')) + '">×</button>'+
+          '</div>').join('') + '</div>'+
+        '<p class="h" style="margin:6px 0 0">' + esc(Lx('แตะที่ชื่อสารเพื่อแก้ปริมาณหรือหน่วย','Tap an ingredient to change its amount or unit')) + '</p>'
+      : '')+
+    (showForm
+      ? '<div class="cform">'+
+          '<label class="fl">' + esc(f.edit >= 0 ? Lx('แก้ไขสารประกอบ','Edit ingredient') : Lx('เพิ่มสารประกอบ','Add an ingredient')) + '</label>'+
+          '<select id="cfK">' + opts + '</select>'+
+          '<input id="cfName" class="' + (f.k === 'custom' ? '' : 'hide') + '" placeholder="' + esc(Lx('ชื่อสาร เช่น แอล-ธีอะนีน','Ingredient name, e.g. L-theanine')) + '" value="' + esc(f.name) + '" autocomplete="off" style="margin-top:8px">'+
+          '<div class="numrow" style="margin-top:8px">'+
+            '<input id="cfAmt" type="number" min="0" step="any" inputmode="decimal" placeholder="' + esc(Lx('ปริมาณ','Amount')) + '" value="' + esc(f.amt) + '">'+
+            '<select id="cfU">' + STRENGTH_UNITS.map(x => '<option value="' + x.u + '"' + (x.u === f.u ? ' selected' : '') + '>' + esc(suLabel(x.u)) + '</option>').join('') + '</select>'+
+          '</div>'+
+          '<div class="two" style="margin-top:10px">'+
+            '<button class="btn ghost sm" id="cfCancel">' + esc(Lx('ยกเลิก','Cancel')) + '</button>'+
+            '<button class="btn sm" id="cfOk">' + esc(f.edit >= 0 ? Lx('บันทึกสารนี้','Save ingredient') : Lx('+ เพิ่มสารนี้','+ Add ingredient')) + '</button></div>'+
+        '</div>'
+      : '<button class="btn ghost sm full" id="cfOpen" style="margin-top:' + (list.length ? '10' : '4') + 'px">' +
+          esc(Lx('+ เพิ่มสารประกอบ','+ Add an ingredient')) + '</button>')+
+    '<div class="two" style="margin-top:10px">'+
       '<button class="btn ghost sm" id="fCompLib">' + esc(Lx('เลือกจากสูตรที่มีขาย','Pick a product formula')) + '</button>'+
-      '<button class="btn ghost sm" id="fCompAdd">' + esc(Lx('+ เพิ่มสารอาหาร','+ Add a nutrient')) + '</button></div>'+
-    (list.length
-      ? '<div id="fCompList">' + list.map((c,i) => {
-          const N = NUTRIENTS[c.k];
-          const rdi = N && N.tag && THAI_RDI[N.tag] ? THAI_RDI[N.tag] : null;
-          return '<div class="crow">'+
-            '<div class="cnm"><b>' + esc(nutLabel(c.k)) + '</b>'+
-            (rdi ? '<span>Thai RDI ' + esc(fmtAmt(rdi.v, rdi.u)) + esc(Lx(' ต่อวัน',' a day')) + '</span>' : '')+
-            '</div>'+
-            '<div class="cin">'+
-              '<input type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="' + (c.amt ? c.amt : '') + '" data-camt="' + i + '">'+
-              '<select data-cu="' + i + '">' +
-                STRENGTH_UNITS.map(x => '<option value="' + x.u + '"' + (x.u === c.u ? ' selected' : '') + '>' + x.th + '</option>').join('') +
-              '</select>'+
-              '<button class="btn sm ghost" data-crm="' + i + '" title="' + esc(Lx('เอาออก','Remove')) + '">×</button>'+
-            '</div></div>';
-        }).join('') + '</div>'+
-        '<div class="two" style="margin-top:12px">'+
-          '<button class="btn ghost sm" id="fCompSave">' + esc(Lx('บันทึกเป็นสูตรของฉัน','Save as my formula')) + '</button>'+
-          '<button class="btn ghost sm" id="fCompClear" style="color:var(--danger)">' + esc(Lx('ล้างทั้งหมด','Clear all')) + '</button></div>'
-      : '<p class="h" style="margin:0">' + esc(Lx('ยังไม่ได้ใส่ส่วนประกอบ เลือกจากสูตรที่มีขายเพื่อให้ระบบเติมให้ทั้งชุด หรือกดเพิ่มสารอาหารทีละอย่าง',
-            'No nutrients yet. Pick a product formula to fill the whole set, or add them one at a time.')) + '</p>')+
+      (list.length ? '<button class="btn ghost sm" id="fCompSave">' + esc(Lx('บันทึกเป็นสูตรของฉัน','Save as my formula')) + '</button>' : '<span></span>')+
+    '</div>'+
     '<div id="fCompSum">' + compSummary(d) + '</div>';
 }
-/* อัปเดตเฉพาะยอดรวม ไม่แตะช่องกรอกที่ผู้ใช้กำลังใช้อยู่ */
 function refreshCompSum(){
   const el = $('#fCompSum');
   if(el) el.innerHTML = compSummary(draft);
 }
-/* วาดใหม่เฉพาะกล่องส่วนประกอบ ไม่แตะฟอร์มส่วนอื่น */
-function refreshComp(){
+/* วาดใหม่เฉพาะกล่องสารประกอบ ถ้าจำนวนสารเปลี่ยนจากศูนย์หรือกลับเป็นศูนย์ ต้องวาดฟอร์มทั้งหมด
+   เพราะช่องปริมาณตัวยาเดี่ยวต้องสลับกับข้อความแยกเป็นรายสาร */
+function refreshComp(hadBefore){
   const box = $('#fCompBody');
-  if(!box){ drawEditor(); return; }
+  const has = hasComp(draft);
+  if(!box || (hadBefore !== undefined && hadBefore !== has)){ drawEditor(); return; }
   box.innerHTML = compBody(draft);
   bindComp();
+}
+function readCompForm(){
+  const k = $('#cfK'), n = $('#cfName'), a = $('#cfAmt'), u = $('#cfU');
+  if(k) compForm.k = k.value;
+  if(n) compForm.name = n.value;
+  if(a) compForm.amt = a.value;
+  if(u) compForm.u = u.value;
 }
 function bindComp(){
   const d = draft;
   const lib = $('#fCompLib');
-  if(lib) lib.onclick = () => { if(window.__sync) window.__sync(); multiPicker(openEditorSheet); };
-  const add = $('#fCompAdd');
-  if(add) add.onclick = () => { if(window.__sync) window.__sync(); nutrientPicker(openEditorSheet); };
-  $$('#fCompBody [data-camt]').forEach(inp => inp.oninput = () => {
-    const i = +inp.dataset.camt;
-    if(d.comp[i]) d.comp[i].amt = inp.value === '' ? 0 : Math.max(0, +inp.value || 0);
-    refreshCompSum();
-  });
-  $$('#fCompBody [data-cu]').forEach(sel => sel.onchange = () => {
-    const i = +sel.dataset.cu;
-    if(d.comp[i]) d.comp[i].u = sel.value;
-    refreshCompSum();
+  if(lib) lib.onclick = () => { if(window.__sync) window.__sync(); readCompForm(); multiPicker(openEditorSheet); };
+  const op = $('#cfOpen');
+  if(op) op.onclick = () => {
+    compForm.open = true;
+    setTimeout(() => { refreshComp(); const k = $('#cfK'); if(k) k.focus(); }, 0);
+  };
+  const k = $('#cfK');
+  if(k) k.onchange = () => {
+    readCompForm();
+    const N = NUTRIENTS[compForm.k];
+    if(N){ compForm.u = N.u; const u = $('#cfU'); if(u) u.value = N.u; }
+    const nm = $('#cfName'); if(nm) nm.classList.toggle('hide', compForm.k !== 'custom');
+    if(compForm.k === 'custom' && nm) nm.focus();
+    else { const a = $('#cfAmt'); if(a) a.focus(); }
+  };
+  ['#cfName','#cfAmt'].forEach(sel => { const e = $(sel); if(e) e.oninput = readCompForm; });
+  const cu = $('#cfU'); if(cu) cu.onchange = readCompForm;
+  const cc = $('#cfCancel');
+  if(cc) cc.onclick = () => { resetCompForm(false); setTimeout(refreshComp, 0); };
+  const ok = $('#cfOk');
+  if(ok) ok.onclick = () => {
+    readCompForm();
+    const f = compForm, amt = +f.amt;
+    if(!f.k){ toast(Lx('เลือกสารประกอบก่อน','Choose an ingredient first')); return; }
+    let key = f.k, name = String(f.name || '').trim();
+    if(key === 'custom'){
+      if(!name){ toast(Lx('พิมพ์ชื่อสารก่อน','Type the ingredient name first')); const n = $('#cfName'); if(n) n.focus(); return; }
+      const hit = nutKeyFromName(name);
+      if(hit) key = hit;
+    }
+    if(!(amt > 0)){ toast(Lx('ใส่ปริมาณต่อ 1 ' + (d.unit||'เม็ด') + ' ตามฉลาก','Type the amount in one ' + unitTx(d.unit) + ' from the label')); const a = $('#cfAmt'); if(a) a.focus(); return; }
+    const row = {k:key, amt:amt, u:f.u};
+    if(key === 'custom'){ row.name = name; row.tags = autoTags(name); }
+    const had = hasComp(d);
+    d.comp = d.comp || [];
+    const dup = d.comp.findIndex((c,i) => i !== f.edit && c.k === key && (key !== 'custom' || (c.name||'') === name));
+    if(dup >= 0){ toast(Lx(compName(row) + ' มีอยู่แล้ว แตะที่รายการเพื่อแก้ปริมาณ', compName(row) + ' is already listed — tap it to change the amount')); return; }
+    if(f.edit >= 0) d.comp[f.edit] = row; else d.comp.push(row);
+    d.strength = null;
+    toast(Lx((f.edit >= 0 ? 'แก้ ' : 'เพิ่ม ') + compName(row) + ' ' + fmtAmt(amt, f.u) + ' แล้ว',
+             (f.edit >= 0 ? 'Updated ' : 'Added ') + compName(row) + ' ' + fmtAmt(amt, f.u)));
+    resetCompForm(true);
+    setTimeout(() => { refreshComp(had); const kk = $('#cfK'); if(kk) kk.focus(); }, 0);
+  };
+  $$('#fCompBody [data-cedit]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.cedit, c = d.comp[i]; if(!c) return;
+    compForm = {k:c.k, name:c.name || '', amt:String(c.amt), u:c.u, edit:i, open:true};
+    setTimeout(() => { refreshComp(); const a = $('#cfAmt'); if(a){ a.focus(); a.scrollIntoView({block:'center', behavior:'smooth'}); } }, 0);
   });
   $$('#fCompBody [data-crm]').forEach(b => b.onclick = () => {
-    const i = +b.dataset.crm;
+    const i = +b.dataset.crm, had = hasComp(d);
+    const nm = compName(d.comp[i]);
     d.comp.splice(i, 1);
-    setTimeout(refreshComp, 0);
+    if(compForm.edit === i) resetCompForm(compForm.open);
+    else if(compForm.edit > i) compForm.edit--;
+    toast(Lx('เอา ' + nm + ' ออกแล้ว','Removed ' + nm));
+    setTimeout(() => refreshComp(had), 0);
   });
   const sv = $('#fCompSave');
   if(sv) sv.onclick = () => { if(window.__sync) window.__sync(); saveMyFormula(d); };
-  const cl = $('#fCompClear');
-  if(cl) cl.onclick = () => {
-    if(confirm(Lx('ล้างส่วนประกอบทั้งหมดของรายการนี้?','Clear every nutrient on this item?'))){ d.comp = []; refreshComp(); }
-  };
 }
 function saveMyFormula(d){
   const name = String(d.name || '').trim();
   if(!name){ toast(Lx('ใส่ชื่อรายการก่อน','Enter a name first')); return; }
-  if(!hasComp(d)){ toast(Lx('ยังไม่มีส่วนประกอบให้บันทึก','There are no nutrients to save yet')); return; }
+  const comp = (d.comp || []).filter(c => (+c.amt || 0) > 0)
+    .map(c => c.k === 'custom' ? [c.k, +c.amt, c.u, c.name, c.tags || []] : [c.k, +c.amt, c.u]);
+  if(!comp.length){ toast(Lx('ยังไม่มีสารประกอบให้บันทึก','There are no ingredients to save yet')); return; }
   DB.customMulti = DB.customMulti || [];
   const row = { id:'my-' + uid(), th:name, en:String(d.nameEn || '').trim() || name, brand:'',
-                unit:d.unit || 'เม็ด', region:'mine',
-                comp:d.comp.filter(c => (+c.amt || 0) > 0).map(c => [c.k, +c.amt, c.u]), at:todayStr() };
-  if(!row.comp.length){ toast(Lx('ยังไม่มีส่วนประกอบให้บันทึก','There are no nutrients to save yet')); return; }
+                unit:d.unit || 'เม็ด', region:'mine', comp:comp, at:todayStr() };
   const old = DB.customMulti.findIndex(x => x.th === row.th);
-  old >= 0 ? DB.customMulti[old] = row : DB.customMulti.push(row);
+  if(old >= 0){ row.id = DB.customMulti[old].id; DB.customMulti[old] = row; } else DB.customMulti.push(row);
   save();
   toast(old >= 0 ? Lx('อัปเดตสูตรของฉันแล้ว','Updated your saved formula')
                  : Lx('บันทึกเป็นสูตรของฉันแล้ว','Saved as your formula'));
-}
-/* แผ่นเลือกสารอาหารทีละอย่าง */
-let nutQ = '';
-function nutrientPicker(back){
-  nutQ = '';
-  const draw = () => {
-    const d = draft, have = new Set((d.comp || []).map(c => c.k));
-    const q = nutQ.trim().toLowerCase();
-    const body = NUT_GROUPS.map(G => {
-      const keys = Object.keys(NUTRIENTS).filter(k => NUTRIENTS[k].g === G.g && !have.has(k) &&
-        (!q || NUTRIENTS[k].th.toLowerCase().includes(q) || NUTRIENTS[k].en.toLowerCase().includes(q) || k.toLowerCase().includes(q)));
-      if(!keys.length) return '';
-      return '<label class="fl">' + esc(Lx(G.th, G.en)) + '</label>'+
-        '<div class="tagpick" style="margin-bottom:14px">' + keys.map(k =>
-          '<button data-n="' + k + '">' + esc(nutLabel(k)) + '</button>').join('') + '</div>';
-    }).join('');
-    $('#nutBody').innerHTML = body || '<div class="empty"><p>' +
-      esc(Lx('เพิ่มครบทุกอย่างในรายการนี้แล้ว','Everything on this list has been added already')) + '</p></div>';
-    $$('#nutBody [data-n]').forEach(b => b.onclick = () => {
-      const k = b.dataset.n, N = NUTRIENTS[k];
-      draft.comp = draft.comp || [];
-      draft.comp.push({k:k, amt:0, u:N.u});
-      draft.multi = true;
-      toast(Lx('เพิ่ม' + N.th + 'แล้ว ใส่ปริมาณต่อ 1 หน่วยได้เลย',
-               'Added ' + N.en + ' — now type the amount in one unit'));
-      draw();
-    });
-  };
-  openSheet('<div class="shd"><b>' + esc(Lx('เพิ่มสารอาหาร','Add a nutrient')) + '</b>'+
-    '<button class="btn sm ghost" onclick="dismissSheet()">' + esc(Lx('เสร็จแล้ว','Done')) + '</button></div>'+
-    '<p style="font-size:12.5px;color:var(--ink-3);margin:-8px 0 12px;line-height:1.55">' +
-    esc(Lx('เลือกสารที่อยู่บนฉลากขวดของคุณ แล้วกรอกปริมาณต่อ 1 เม็ดหรือ 1 แคปซูลตามที่ฉลากเขียนไว้',
-           'Pick what is printed on your bottle, then type the amount in one tablet or capsule exactly as the label says.')) + '</p>'+
-    '<input id="nutQ" placeholder="' + esc(Lx('ค้นหาชื่อสารอาหาร','Search a nutrient')) + '" autocomplete="off" style="margin-bottom:12px">'+
-    '<div id="nutBody"></div>', back);
-  const qi = $('#nutQ');
-  qi.oninput = () => { nutQ = qi.value; const pos = qi.selectionStart; draw(); const n = $('#nutQ'); n.focus(); n.setSelectionRange(pos, pos); };
-  draw();
 }
 /* แผ่นเลือกสูตรวิตามินรวมที่มีขาย */
 let mvRegion = 'th';
@@ -5167,8 +5261,10 @@ function multiPicker(back){
 function applyFormula(x, back){
   if(!x) return;
   const d = draft;
-  d.comp = x.comp.map(c => ({k:c[0], amt:c[1], u:c[2]}));
-  d.multi = true;
+  d.comp = x.comp.map(c => c[0] === 'custom'
+    ? {k:'custom', amt:c[1], u:c[2], name:c[3] || '', tags:c[4] || []}
+    : {k:c[0], amt:c[1], u:c[2]});
+  resetCompForm(false);
   if(!String(d.name || '').trim()){ d.name = x.th; d.nameEn = x.en || x.th; }
   if(x.unit) d.unit = x.unit;
   d.strength = null;
@@ -5256,19 +5352,19 @@ function drawEditor(){
     (isWater
       ? '<div class="two"><div class="fld"><label class="fl">ดื่มครั้งละ</label>'+
         '<div class="numrow"><input id="fPerDose" type="number" min="0.25" step="0.25" value="' + (d.perDose||1) + '">'+
-        '<select id="fUnit">' + WATER_UNITS.map(u => '<option' + (u===d.unit?' selected':'') + '>' + u + '</option>').join('') + '</select></div></div>'+
+        '<select id="fUnit">' + WATER_UNITS.map(u => '<option value="' + u + '"' + (u===d.unit?' selected':'') + '>' + esc(fuLabel(u)) + '</option>').join('') + '</select></div></div>'+
         (d.unit === 'มิลลิลิตร' ? '<div class="fld"></div>'
           : '<div class="fld"><label class="fl">ปริมาตรต่อ 1 ' + esc(d.unit) + ' (มล.)</label>'+
             '<input id="fStrength" type="number" min="1" step="10" value="' + (d.strength || WATER_VOL[d.unit] || 250) + '"></div>')+
         '</div>'
       : '<div class="two"><div class="fld"><label class="fl">กินครั้งละ</label>'+
         '<div class="numrow"><input id="fPerDose" type="number" min="0.25" step="0.25" value="' + (d.perDose||1) + '">'+
-        '<select id="fUnit">' + FORM_UNITS.map(u => '<option' + (u===(d.unit||'เม็ด')?' selected':'') + '>' + u + '</option>').join('') + '</select></div></div>'+
-        (d.multi ? '<div class="fld"><label class="fl">ปริมาณตัวยาต่อ 1 ' + esc(d.unit||'เม็ด') + '</label>'+
+        '<select id="fUnit">' + FORM_UNITS.map(u => '<option value="' + u + '"' + (u===(d.unit||'เม็ด')?' selected':'') + '>' + esc(fuLabel(u)) + '</option>').join('') + '</select></div></div>'+
+        (hasComp(d) ? '<div class="fld"><label class="fl">ปริมาณตัวยาต่อ 1 ' + esc(d.unit||'เม็ด') + '</label>'+
           '<p class="h" style="margin:9px 0 0">' + esc(Lx('แยกเป็นรายสารอยู่ด้านล่าง','Listed nutrient by nutrient below')) + '</p></div>'
         : '<div class="fld"><label class="fl">ปริมาณตัวยาต่อ 1 ' + esc(d.unit||'เม็ด') + '</label>'+
         '<div class="numrow"><input id="fStrength" type="number" min="0" step="any" placeholder="เช่น 500" value="' + (d.strength==null?'':d.strength) + '">'+
-        '<select id="fSUnit">' + STRENGTH_UNITS.map(x => '<option value="' + x.u + '"' + (x.u===(d.strengthUnit||'mg')?' selected':'') + '>' + x.th + '</option>').join('') + '</select></div></div>')+
+        '<select id="fSUnit">' + STRENGTH_UNITS.map(x => '<option value="' + x.u + '"' + (x.u===(d.strengthUnit||'mg')?' selected':'') + '>' + esc(suLabel(x.u)) + '</option>').join('') + '</select></div></div>')+
         '</div>')+
     '<p style="font-size:12.5px;color:var(--ink-3);margin:-6px 0 14px;line-height:1.55" id="fDosePv"></p>'+
     (isWater ? '' : compCard(d))+
@@ -5361,7 +5457,7 @@ function drawEditor(){
       if(!d.strength) d.strength = WATER_VOL[d.unit] || 250;
     }
     d.dose = (d.perDose || 1) + ' ' + (d.unit || 'เม็ด') +
-      (d.multi ? '' : (d.strength && d.type !== 'water' ? ' (' + fmtAmt((d.perDose||1) * d.strength, d.strengthUnit) + ')' : ''));
+      (hasComp(d) ? '' : (d.strength && d.type !== 'water' ? ' (' + fmtAmt((d.perDose||1) * d.strength, d.strengthUnit) + ')' : ''));
     const pv = g('#fDosePv');
     if(pv){
       const per = (d.perDose||1), n = (d.times||[]).length;
@@ -5377,12 +5473,9 @@ function drawEditor(){
           esc(fmtAmt(day, 'mL')) + ' ต่อวัน' +
           (tgt ? '<br>ร่างกายคุณที่ ' + showMass(w) + ' ต้องการน้ำราว ' + esc(fmtAmt(tgt, 'mL')) +
             ' ต่อวัน ตอนนี้ตั้งไว้ ' + Math.round(day / tgt * 100) + '%' : '');
-      } else if(d.multi){
-        pv.textContent = hasComp(d)
-          ? Lx('มีส่วนประกอบ ' + d.comp.length + ' ชนิด · วันละ ' + n + ' ครั้ง ยอดรวมต่อวันอยู่ท้ายกล่องส่วนประกอบ',
-               d.comp.length + ' nutrients · ' + n + ' times a day — the daily totals are at the end of the nutrient box')
-          : Lx('เปิดโหมดหลายสารไว้แล้ว ใส่ส่วนประกอบในกล่องด้านล่าง',
-               'Multi-nutrient mode is on — add the nutrients in the box below');
+      } else if(hasComp(d)){
+        pv.textContent = Lx('มีสารประกอบ ' + d.comp.length + ' ชนิด · วันละ ' + n + ' ครั้ง ยอดต่อวันของแต่ละสารอยู่ท้ายกล่องสารประกอบ',
+               d.comp.length + ' ingredients · ' + n + ' times a day — the daily total of each is at the end of the ingredients box');
       } else {
         pv.innerHTML = d.strength
           ? 'ครั้งละ ' + esc(fmtAmt(per * d.strength, d.strengthUnit)) + ' · วันละ ' + n + ' ครั้ง รวม ' +
@@ -5501,12 +5594,6 @@ function drawEditor(){
   $('#addTime').onclick = () => { sync(); askTime(t => { if(!d.times.includes(t)){ d.times.push(t); d.times.sort((a,b)=>toMin(a)-toMin(b)); } drawEditor(); }); };
   $('#fActive').onclick = () => { sync(); d.active = !d.active; drawEditor(); };
   const so = $('#fStockOn'); if(so) so.onclick = () => { sync(); d.stockOn = !d.stockOn; drawEditor(); };
-  const mo = $('#fMultiOn');
-  if(mo) mo.onclick = () => {
-    sync(); d.multi = !d.multi;
-    if(d.multi){ d.comp = d.comp || []; d.strength = null; }
-    drawEditor();
-  };
   bindComp();
   $('#edBody').dataset.sync = '1';
   window.__sync = sync;
@@ -5545,8 +5632,10 @@ function saveDraft(){
   d.name = d.name.trim();
   d.tags = d.tags || []; d.tagsOff = d.tagsOff || [];
   /* ทิ้งส่วนประกอบที่ยังไม่ได้กรอกปริมาณ แล้วให้ธงตรงกับสิ่งที่เหลือจริง */
-  d.comp = (d.comp || []).filter(c => NUTRIENTS[c.k] && (+c.amt || 0) > 0)
-                         .map(c => ({k:c.k, amt:+c.amt, u:c.u || NUTRIENTS[c.k].u}));
+  d.comp = (d.comp || []).filter(c => (NUTRIENTS[c.k] || (c.k === 'custom' && c.name)) && (+c.amt || 0) > 0)
+                         .map(c => c.k === 'custom'
+                           ? {k:'custom', name:String(c.name).trim(), tags:c.tags || autoTags(c.name), amt:+c.amt, u:c.u || 'mg'}
+                           : {k:c.k, amt:+c.amt, u:c.u || NUTRIENTS[c.k].u});
   d.multi = d.comp.length > 0;
   if(d.multi) d.strength = null;
   /* กันไว้อีกชั้น เผื่อชื่อถูกพิมพ์เองโดยไม่ได้เลือกจากคลัง ยาต้องไม่ถูกบันทึกเป็นอาหารเสริม */
@@ -5849,7 +5938,7 @@ function showAlarm(){
     '<div class="alh"><div class="ic">' + (m.icon || '💊') + '</div>'+
     '<div class="lead">' + head + '</div>'+
     '<div class="tt num">' + d.time + '</div>'+
-    '<div class="nn">' + esc(m.name) + (m.dose ? ' · ' + esc(m.dose) : '') + '</div>'+
+    '<div class="nn">' + esc(m.name) + ' · ' + esc(doseText(m)) + '</div>'+
     (mealShort(m) ? '<div style="margin-top:8px"><span class="chip meal">' + mealShort(m) + '</span></div>' : '')+
     '</div>'+
     (w.length ? w.map(x => '<div class="link ' + (x.r.sev === 'high' ? '' : 'mod') + '" style="margin-left:0">'+
@@ -5871,7 +5960,7 @@ function showAlarm(){
   }
   $('#alarm').classList.add('on');
   beep();
-  fireNoti(head + ' · ' + d.time, m.name + (m.dose ? ' ' + m.dose : '') +
+  fireNoti(head + ' · ' + d.time, m.name + ' ' + doseText(m) +
     (mealShort(m) ? ' (' + mealShort(m) + ')' : '') + (w.length ? '\n⚠ อย่ากินคู่กับ ' + w[0].name : ''));
 
   const close = () => { alarmCur = null; $('#alarm').classList.remove('on'); setTimeout(showAlarm, 350); };
@@ -7294,6 +7383,8 @@ const UNIT_EN = {'เม็ด':'tablet','แคปซูล':'capsule','ซอ�
  'ก่อนอาหาร':'Before meals','หลังอาหาร':'After meals','พร้อมอาหาร':'With meals','ตอนท้องว่าง':'On an empty stomach',
  'ท้องว่าง':'Empty stomach','ก่อนนอน':'At bedtime','ปี':'years','กก.':'kg','ซม.':'cm','ไม่ระบุเพศ':'sex not stated'};
 Object.assign(DICT, UNIT_EN);
+Object.keys(SU_TH).forEach(u => { const th = SU_TH[u], en = SU_EN[u]; if(th !== en) DICT[th + ' (' + en + ')'] = en + ' (' + th + ')'; });
+Object.keys(UNIT_EN).forEach(u => { const en = UNIT_EN[u]; if(en !== u && !/[.]$/.test(u)) DICT[u + ' (' + en + ')'] = en + ' (' + u + ')'; });
 
 /* หมวดในรายการยา */
 Object.assign(DICT, {
@@ -7578,7 +7669,7 @@ function boot(){
 loadData().then(boot).catch(dataError);
 
 /* ================= แจ้งเมื่อมีเวอร์ชันใหม่ ================= */
-const APP_VERSION = '35';
+const APP_VERSION = '36';
 let swReg = null, updWaiting = null, updReloading = false;
 function showUpdateBar(w){
   updWaiting = w;
